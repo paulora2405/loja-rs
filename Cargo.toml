@@ -1,0 +1,12 @@
+[package]
+name = "nano-valkey"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+anyhow = "1.0.95"
+bytes = "1.9.0"
+env_logger = "0.11.6"
+log = "0.4.22"
+mini-redis = "0.4.1"
+tokio = { version = "1.42.0", features = ["full"] }
