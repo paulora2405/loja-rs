@@ -2,14 +2,13 @@ use anyhow::Context;
 use bytes::Bytes;
 use log::info;
 use mini_redis::{Connection, Frame};
-use std::{
-    collections::HashMap,
-    io::Read,
-    sync::{Arc, Mutex},
+use std::{collections::HashMap, sync::Arc};
+use tokio::{
+    net::{TcpListener, TcpStream},
+    sync::RwLock,
 };
-use tokio::net::{TcpListener, TcpStream};
 
-type Db = Arc<Mutex<HashMap<String, Bytes>>>;
+type Db = Arc<RwLock<HashMap<String, Bytes>>>;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -22,7 +21,7 @@ async fn main() -> anyhow::Result<()> {
         .context("failed to bind tcp listener")?;
     info!("Listening on port 6379");
 
-    let db = Arc::new(Mutex::new(HashMap::new()));
+    let db = Arc::new(RwLock::new(HashMap::new()));
 
     loop {
         let (socket, _) = listener
@@ -49,15 +48,20 @@ async fn process(socket: TcpStream, db: Db) {
                     cmd.key(),
                     String::from_utf8_lossy(cmd.value())
                 );
-                let mut db = db.lock().unwrap();
-                db.insert(cmd.key().to_string(), cmd.value().clone());
+                {
+                    let mut db = db.write().await;
+                    db.insert(cmd.key().to_string(), cmd.value().clone());
+                }
                 Frame::Simple("OK".to_string())
             }
             Get(cmd) => {
                 info!("GET {:?}", cmd.key());
-                let db = db.lock().unwrap();
-                if let Some(value) = db.get(cmd.key()) {
-                    Frame::Bulk(value.clone())
+                let value = {
+                    let db = db.read().await;
+                    db.get(cmd.key()).cloned()
+                };
+                if let Some(value) = value {
+                    Frame::Bulk(value)
                 } else {
                     Frame::Null
                 }
