@@ -1,20 +1,19 @@
 use anyhow::Context;
 use bytes::Bytes;
-use log::info;
-use mini_redis::{Connection, Frame};
+use mini_redis::Command::{self, Get, Set};
+use nano_valkey::{Connection, Frame};
 use std::{collections::HashMap, sync::Arc};
 use tokio::{
     net::{TcpListener, TcpStream},
     sync::RwLock,
 };
+use tracing::{debug, debug_span, info};
 
 type Db = Arc<RwLock<HashMap<String, Bytes>>>;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    env_logger::builder()
-        .filter_level(log::LevelFilter::Info)
-        .init();
+    tracing_subscriber::fmt::init();
 
     let listener = TcpListener::bind("127.0.0.1:6379")
         .await
@@ -35,33 +34,32 @@ async fn main() -> anyhow::Result<()> {
     }
 }
 
+#[tracing::instrument(skip(db))]
 async fn process(socket: TcpStream, db: Db) {
-    use mini_redis::Command::{self, Get, Set};
-
     let mut connection = Connection::new(socket);
 
     while let Some(frame) = connection.read_frame().await.unwrap() {
         let response = match Command::from_frame(frame).unwrap() {
             Set(cmd) => {
-                info!(
-                    "SET {:?} = {:?}",
-                    cmd.key(),
-                    String::from_utf8_lossy(cmd.value())
-                );
+                let span = debug_span!("set");
+                let _enter = span.enter();
+                debug!("{:?}:{:?}", cmd.key(), cmd.value());
                 {
                     let mut db = db.write().await;
                     db.insert(cmd.key().to_string(), cmd.value().clone());
                 }
-                Frame::Simple("OK".to_string())
+                Frame::SimpleString("OK".to_string())
             }
             Get(cmd) => {
-                info!("GET {:?}", cmd.key());
+                let span = debug_span!("get");
+                let _enter = span.enter();
                 let value = {
                     let db = db.read().await;
                     db.get(cmd.key()).cloned()
                 };
+                debug!("{:?}:{value:?}", cmd.key());
                 if let Some(value) = value {
-                    Frame::Bulk(value)
+                    Frame::BulkString(value)
                 } else {
                     Frame::Null
                 }
