@@ -1,7 +1,7 @@
 use bytes::Bytes;
-use log::info;
 use mini_redis::client;
 use tokio::sync::{mpsc, oneshot};
+use tracing::info;
 
 type Responder<T> = oneshot::Sender<mini_redis::Result<T>>;
 #[derive(Debug)]
@@ -19,9 +19,7 @@ enum Command {
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    env_logger::builder()
-        .filter_level(log::LevelFilter::Info)
-        .init();
+    tracing_subscriber::fmt::init();
     info!("Starting client");
 
     let (tx, mut rx) = mpsc::channel(32);
