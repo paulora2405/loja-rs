@@ -7,10 +7,11 @@ use crate::{Error, Result};
 /// A frame in Redis Serialization Protocol (RESP).
 ///
 /// See: https://redis.io/docs/latest/develop/reference/protocol-spec/
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Frame {
     SimpleString(String),
     SimpleError(String),
+    /// TODO: Use `i64` instead of `u64` to represent signed integers. And update the codec accordingly.
     Integer(u64),
     BulkString(Bytes),
     Array(Vec<Frame>),
@@ -51,6 +52,7 @@ impl Frame {
     }
 
     pub fn parse(src: &mut Cursor<&[u8]>) -> Result<Frame> {
+        // The first byte of the frame indicates the data type.
         match get_u8(src)? {
             b'+' => {
                 let line = get_line(src)?.to_vec();
@@ -62,10 +64,7 @@ impl Frame {
                 let string = String::from_utf8(line)?;
                 Ok(Frame::SimpleError(string))
             }
-            b':' => {
-                let len = get_decimal(src)?;
-                Ok(Frame::Integer(len))
-            }
+            b':' => Ok(Frame::Integer(get_decimal(src)?)),
             b'$' => {
                 if b'-' == peek_u8(src)? {
                     let line = get_line(src)?;
@@ -94,6 +93,36 @@ impl Frame {
                 Ok(Frame::Array(out))
             }
             _ => unimplemented!(),
+        }
+    }
+
+    pub(crate) fn array() -> Self {
+        Frame::Array(vec![])
+    }
+
+    pub(crate) fn push_bulk(&mut self, bytes: Bytes) -> Result<()> {
+        match self {
+            Frame::Array(vec) => {
+                vec.push(Frame::BulkString(bytes));
+                Ok(())
+            }
+            ty => Err(Error::WrongFrameType(format!(
+                "cannot push to non-array frame type, type was {:?}",
+                ty
+            ))),
+        }
+    }
+
+    pub(crate) fn push_int(&mut self, value: u64) -> Result<()> {
+        match self {
+            Frame::Array(vec) => {
+                vec.push(Frame::Integer(value));
+                Ok(())
+            }
+            ty => Err(Error::WrongFrameType(format!(
+                "cannot push to non-array frame type, type was {:?}",
+                ty
+            ))),
         }
     }
 }
