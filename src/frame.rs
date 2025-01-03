@@ -171,3 +171,74 @@ fn get_line<'a>(src: &'a mut Cursor<&[u8]>) -> NVResult<&'a [u8]> {
     }
     Err(Error::IncompleteFrame)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_simple_string() {
+        let mut buf = Cursor::new(b"+OK\r\n".as_slice());
+        let frame = Frame::parse(&mut buf).unwrap();
+        assert_eq!(frame, Frame::SimpleString("OK".to_string()));
+    }
+
+    #[test]
+    fn test_simple_error() {
+        let mut buf = Cursor::new(b"-ERR unknown command 'foobar'\r\n".as_slice());
+        let frame = Frame::parse(&mut buf).unwrap();
+        assert_eq!(
+            frame,
+            Frame::SimpleError("ERR unknown command 'foobar'".to_string())
+        );
+    }
+
+    #[test]
+    fn test_integer() {
+        let mut buf = Cursor::new(b":1000\r\n".as_slice());
+        let frame = Frame::parse(&mut buf).unwrap();
+        assert_eq!(frame, Frame::Integer(1000));
+
+        let mut buf = Cursor::new(b":000001\r\n".as_slice());
+        let frame = Frame::parse(&mut buf).unwrap();
+        assert_eq!(frame, Frame::Integer(1));
+
+        let mut buf = Cursor::new(b":00000000\r\n".as_slice());
+        let frame = Frame::parse(&mut buf).unwrap();
+        assert_eq!(frame, Frame::Integer(0));
+    }
+
+    #[test]
+    fn test_bulk_string() {
+        let mut buf = Cursor::new(b"$6\r\nfoobar\r\n".as_slice());
+        let frame = Frame::parse(&mut buf).unwrap();
+        assert_eq!(frame, Frame::BulkString(Bytes::from("foobar")));
+    }
+
+    #[test]
+    fn test_null_bulk_string() {
+        let mut buf = Cursor::new(b"$-1\r\n".as_slice());
+        let frame = Frame::parse(&mut buf).unwrap();
+        assert_eq!(frame, Frame::Null);
+    }
+
+    #[test]
+    fn test_array() {
+        let mut buf = Cursor::new(b"*2\r\n+OK\r\n$6\r\nfoobar\r\n".as_slice());
+        let frame = Frame::parse(&mut buf).unwrap();
+        assert_eq!(
+            frame,
+            Frame::Array(vec![
+                Frame::SimpleString("OK".to_string()),
+                Frame::BulkString(Bytes::from("foobar")),
+            ])
+        );
+    }
+
+    #[test]
+    fn test_invalid_frame() {
+        let mut buf = Cursor::new(b"invalid frame\r\n".as_slice());
+        let frame = Frame::parse(&mut buf);
+        assert!(frame.is_err());
+    }
+}
