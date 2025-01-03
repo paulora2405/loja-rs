@@ -1,1 +1,1 @@
-pub(crate) struct Shutdown {}
+pub struct Shutdown {}
