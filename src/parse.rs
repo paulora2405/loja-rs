@@ -1,4 +1,4 @@
-use crate::{Error, Frame, Result};
+use crate::{Error, Frame, NVResult};
 use bytes::Bytes;
 
 #[derive(Debug)]
@@ -7,7 +7,7 @@ pub struct Parse {
 }
 
 impl Parse {
-    pub(crate) fn new(frame: Frame) -> Result<Parse> {
+    pub(crate) fn new(frame: Frame) -> NVResult<Parse> {
         let array = match frame {
             Frame::Array(array) => array,
             frame => return Err(Error::Protocol(format!("expected array, got {frame:?}"))),
@@ -18,11 +18,12 @@ impl Parse {
         })
     }
 
-    fn next(&mut self) -> Result<Frame> {
+    fn next(&mut self) -> NVResult<Frame> {
         self.parts.next().ok_or(Error::EndOfStream)
     }
 
-    pub(crate) fn next_string(&mut self) -> Result<String> {
+    #[tracing::instrument]
+    pub(crate) fn next_string(&mut self) -> NVResult<String> {
         match self.next()? {
             Frame::SimpleString(s) => Ok(s),
             Frame::BulkString(data) => std::str::from_utf8(&data[..])
@@ -34,7 +35,7 @@ impl Parse {
         }
     }
 
-    pub(crate) fn next_bytes(&mut self) -> Result<Bytes> {
+    pub(crate) fn next_bytes(&mut self) -> NVResult<Bytes> {
         match self.next()? {
             Frame::SimpleString(s) => Ok(Bytes::from(s.into_bytes())),
             Frame::BulkString(data) => Ok(data),
@@ -44,7 +45,7 @@ impl Parse {
         }
     }
 
-    pub(crate) fn next_int(&mut self) -> Result<u64> {
+    pub(crate) fn next_int(&mut self) -> NVResult<u64> {
         use atoi::atoi;
         let invalid_number_err: Error = Error::Protocol("invalid number".to_string());
 
@@ -58,7 +59,7 @@ impl Parse {
         }
     }
 
-    pub(crate) fn finish(&mut self) -> Result<()> {
+    pub(crate) fn finish(&mut self) -> NVResult<()> {
         if self.parts.next().is_none() {
             Ok(())
         } else {

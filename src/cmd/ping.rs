@@ -1,7 +1,7 @@
+use super::Command;
+use crate::Frame;
 use bytes::Bytes;
 use tracing::debug;
-
-use crate::{cmd::Command, Frame};
 
 #[derive(Debug, Default)]
 pub struct PingCmd {
@@ -15,7 +15,7 @@ impl PingCmd {
 }
 
 impl Command for PingCmd {
-    fn parse_frames(parse: &mut super::Parse) -> crate::Result<Self>
+    fn parse_frames(parse: &mut super::Parse) -> crate::NVResult<Self>
     where
         Self: Sized,
     {
@@ -27,7 +27,7 @@ impl Command for PingCmd {
     }
 
     #[tracing::instrument(skip(self, _db, dst))]
-    async fn apply(self, _db: &crate::Db, dst: &mut crate::Connection) -> crate::Result<()> {
+    async fn apply(self, _db: &crate::Db, dst: &mut crate::Connection) -> crate::NVResult<()> {
         let response = match self.msg {
             None => Frame::SimpleString("PONG".to_string()),
             Some(msg) => Frame::BulkString(msg),
@@ -40,9 +40,9 @@ impl Command for PingCmd {
         Ok(())
     }
 
-    fn into_frame(self) -> crate::Result<Frame> {
+    fn into_frame(self) -> crate::NVResult<Frame> {
         let mut frame = Frame::array();
-        frame.push_bulk(Bytes::from("ping".as_bytes()))?;
+        frame.push_bulk(Bytes::from("ping"))?;
         if let Some(msg) = self.msg {
             frame.push_bulk(msg)?;
         }
@@ -72,8 +72,8 @@ mod tests {
         let expected = b"*2\r\n$4\r\nping\r\n$4\r\nMONG\r\n";
         let mut expected = Cursor::new(&expected[..]);
         let expected_frame = Frame::Array(vec![
-            Frame::BulkString(Bytes::from("ping".as_bytes())),
-            Frame::BulkString(Bytes::from("MONG".as_bytes())),
+            Frame::BulkString(Bytes::from("ping")),
+            Frame::BulkString(Bytes::from("MONG")),
         ]);
         assert_eq!(expected_frame, Frame::parse(&mut expected).unwrap());
         assert_eq!(

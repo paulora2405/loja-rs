@@ -41,7 +41,7 @@ impl Connection {
     /// On success, the received frame is returned. If the `TcpStream`
     /// is closed in a way that doesn't break a frame in half, it returns
     /// `None`. Otherwise, an error is returned.
-    pub async fn read_frame(&mut self) -> crate::Result<Option<Frame>> {
+    pub async fn read_frame(&mut self) -> crate::NVResult<Option<Frame>> {
         loop {
             // Attempt to parse a frame from the buffered data. If enough data
             // has been buffered, the frame is returned.
@@ -71,7 +71,7 @@ impl Connection {
         }
     }
 
-    fn parse_frame(&mut self) -> crate::Result<Option<Frame>> {
+    fn parse_frame(&mut self) -> crate::NVResult<Option<Frame>> {
         let mut buf = Cursor::new(&self.buffer[..]);
 
         match Frame::check(&mut buf) {
@@ -101,7 +101,7 @@ impl Connection {
     /// syscalls. However, it is fine to call these functions on a *buffered*
     /// write stream. The data will be written to the buffer. Once the buffer is
     /// full, it is flushed to the underlying socket.
-    pub async fn write_frame(&mut self, frame: &Frame) -> crate::Result<()> {
+    pub async fn write_frame(&mut self, frame: &Frame) -> crate::NVResult<()> {
         // Arrays are encoded by encoding each entry. All other frame types are
         // considered literals. For now, mini-redis is not able to encode
         // recursive frame structures. See below for more details.
