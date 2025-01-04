@@ -6,7 +6,7 @@ use crate::{Error, NVResult};
 
 /// A frame in Redis Serialization Protocol (RESP).
 ///
-/// See: https://redis.io/docs/latest/develop/reference/protocol-spec/
+/// See: <https://redis.io/docs/latest/develop/reference/protocol-spec/>
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Frame {
     SimpleString(String),
