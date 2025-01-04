@@ -1,9 +1,12 @@
 use std::io::Cursor;
 
 use crate::frame::Frame;
+use crate::{Error, NVResult};
 use bytes::{Buf, BytesMut};
 use tokio::io::{AsyncReadExt, AsyncWriteExt, BufWriter};
 use tokio::net::TcpStream;
+
+const DEFAULT_BUFFER_SIZE: usize = 16 * 1024;
 
 /// Send and receive `Frame` values from a remote peer.
 ///
@@ -23,10 +26,13 @@ pub struct Connection {
 }
 
 impl Connection {
+    /// Create a new `Connection` from a `TcpStream` socket.
+    ///
+    /// The connection is internally buffered, with a default buffer size of 16KB.
     pub fn new(socket: TcpStream) -> Self {
         Self {
             stream: BufWriter::new(socket),
-            buffer: BytesMut::with_capacity(4 * 1024),
+            buffer: BytesMut::with_capacity(DEFAULT_BUFFER_SIZE),
         }
     }
 
@@ -41,7 +47,7 @@ impl Connection {
     /// On success, the received frame is returned. If the `TcpStream`
     /// is closed in a way that doesn't break a frame in half, it returns
     /// `None`. Otherwise, an error is returned.
-    pub async fn read_frame(&mut self) -> crate::NVResult<Option<Frame>> {
+    pub async fn read_frame(&mut self) -> NVResult<Option<Frame>> {
         loop {
             // Attempt to parse a frame from the buffered data. If enough data
             // has been buffered, the frame is returned.
@@ -62,7 +68,7 @@ impl Connection {
                 if self.buffer.is_empty() {
                     return Ok(None);
                 } else {
-                    return Err(crate::Error::Io(std::io::Error::new(
+                    return Err(Error::Io(std::io::Error::new(
                         std::io::ErrorKind::ConnectionReset,
                         "connection was closed mid frame",
                     )));
@@ -71,7 +77,13 @@ impl Connection {
         }
     }
 
-    fn parse_frame(&mut self) -> crate::NVResult<Option<Frame>> {
+    /// Tries to parse a frame from the buffered data, if enough data has been buffered.
+    ///
+    /// If there isn't enough data, i.e. `Error::IncompleteFrame` occurs,
+    /// `Ok(None)` is returned.
+    ///
+    /// Any other errors are returned as is.
+    fn parse_frame(&mut self) -> NVResult<Option<Frame>> {
         let mut buf = Cursor::new(&self.buffer[..]);
 
         match Frame::check(&mut buf) {
@@ -87,7 +99,7 @@ impl Connection {
                 Ok(Some(frame))
             }
             // not enough data has been buffered
-            Err(crate::Error::IncompleteFrame) => Ok(None),
+            Err(Error::IncompleteFrame) => Ok(None),
             // an actual error has occurred
             Err(e) => Err(e),
         }
@@ -101,7 +113,7 @@ impl Connection {
     /// syscalls. However, it is fine to call these functions on a *buffered*
     /// write stream. The data will be written to the buffer. Once the buffer is
     /// full, it is flushed to the underlying socket.
-    pub async fn write_frame(&mut self, frame: &Frame) -> crate::NVResult<()> {
+    pub async fn write_frame(&mut self, frame: &Frame) -> NVResult<()> {
         // Arrays are encoded by encoding each entry. All other frame types are
         // considered literals. For now, mini-redis is not able to encode
         // recursive frame structures. See below for more details.
@@ -116,7 +128,7 @@ impl Connection {
             _ => self.write_value(frame).await?,
         };
 
-        self.stream.flush().await.map_err(crate::Error::from)
+        self.stream.flush().await.map_err(Error::from)
     }
 
     async fn write_value(&mut self, frame: &Frame) -> std::io::Result<()> {
