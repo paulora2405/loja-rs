@@ -1,3 +1,4 @@
+#![allow(dead_code, unused)] // TODO: remove this
 use bytes::Bytes;
 use std::{collections::HashMap, sync::Arc};
 use tokio::sync::RwLock;
@@ -6,6 +7,7 @@ mod parse;
 
 pub mod cmd;
 pub mod connection;
+pub mod db;
 pub mod error;
 pub mod frame;
 pub mod shutdown;
