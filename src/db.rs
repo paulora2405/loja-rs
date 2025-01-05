@@ -118,6 +118,7 @@ impl Db {
             background_task: Notify::new(),
         });
 
+        // Start the background task.
         tokio::spawn(purge_expired_tasks(shared.clone()));
 
         Self { shared }
@@ -224,7 +225,9 @@ impl DbSharedState {
     /// Purge all expired keys and return the `Instant` at which the **next** key will expire.
     ///
     /// The background task will sleep until this instant.
+    #[tracing::instrument(skip_all)]
     fn purge_expired_keys(&self) -> Option<Instant> {
+        debug!("starting purge of expired keys");
         let mut state = self.state.write().unwrap();
 
         if state.shutdown {
@@ -245,16 +248,19 @@ impl DbSharedState {
 
         while let Some(&(when, ref key)) = state.expirations.iter().next() {
             if when > now {
+                debug!("next expiration is in the future, done purging");
                 // Done purging, `when` is the instant at which the next key expires.
                 // The works task will wait until this instant.
                 return Some(when);
             }
 
             // The key has expired, remove it.
+            debug!("removing expired {key:?}");
             state.entries.remove(key);
             state.expirations.remove(&(when, key.clone()));
         }
 
+        debug!("no keys to purge");
         None
     }
 }
@@ -280,16 +286,27 @@ async fn purge_expired_tasks(shared: Arc<DbSharedState>) {
         // which the **next** key will expire. The worker should wait until the
         // instant has passed then purge again.
         if let Some(when) = shared.purge_expired_keys() {
+            // Wait until the next key expires **or** until the background task
+            // is notified. If the task is notified, then it must reload its
+            // state as new keys have been set to expire early. This is done by
+            // looping.
+            debug!("there are future expirations, sleeping or waiting for notification, whichever comes first");
             tokio::select! {
-                _ = tokio::time::sleep_until(when) => {}
-                _ = shared.background_task.notified() => {}
+                _ = tokio::time::sleep_until(when) => {
+                    debug!("background task woke up from sleep");
+                }
+                _ = shared.background_task.notified() => {
+                    debug!("background task notified");
+                }
             }
         } else {
             // There are no keys expiring in the future.
             // Wait until the task is notified.
+            debug!("no future expirations, waiting for notification");
             shared.background_task.notified().await;
+            debug!("background task notified");
         }
     }
 
-    debug!("Purge background task shutdown");
+    debug!("purge background task shutdown");
 }
