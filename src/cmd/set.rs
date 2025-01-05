@@ -42,8 +42,7 @@ impl Command for SetCmd {
     #[tracing::instrument(skip_all)]
     async fn apply(self, db: &crate::Db, dst: &mut crate::Connection) -> NVResult<()> {
         {
-            let mut db = db.write().await;
-            db.insert(self.key, self.value);
+            db.set(self.key, self.value, None);
         }
         let response = Frame::SimpleString("OK".to_string());
         debug!(?response);
