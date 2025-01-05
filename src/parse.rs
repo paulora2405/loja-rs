@@ -22,7 +22,7 @@ impl Parse {
         self.parts.next().ok_or(Error::EndOfStream)
     }
 
-    #[tracing::instrument(ret, skip_all, level = "debug")]
+    #[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn next_string(&mut self) -> NVResult<String> {
         match self.next()? {
             Frame::SimpleString(s) => Ok(s),
