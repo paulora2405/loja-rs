@@ -97,8 +97,8 @@ impl DbDropGuard {
 }
 
 impl Drop for DbDropGuard {
+    /// This `drop` signals the `Db` instance to shutdown the task that purges expired values.
     fn drop(&mut self) {
-        // Signal the `Db` instance to shutdown the task that purges expired values.
         self.db.shutdown_purge_task();
     }
 }
