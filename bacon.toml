@@ -96,6 +96,7 @@ command = [
     "server",
     # put launch parameters for your program behind a `--` separator
 ]
+env.RUST_LOG = "debug"
 need_stdout = true
 allow_warnings = true
 background = false
