@@ -1,8 +1,6 @@
-use std::io::Cursor;
-
-use bytes::{Buf, Bytes};
-
 use crate::{Error, NVResult};
+use bytes::{Buf, Bytes};
+use std::io::Cursor;
 
 /// A frame in Redis Serialization Protocol (RESP).
 ///
