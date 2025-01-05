@@ -1,11 +1,12 @@
 use crate::{parse::Parse, Connection, Db, Error, Frame, NVResult, Shutdown};
 
 pub mod get;
-pub mod ping;
-pub mod set;
-
 pub use get::GetCmd;
+
+pub mod ping;
 pub use ping::PingCmd;
+
+pub mod set;
 pub use set::SetCmd;
 
 pub(crate) trait Command {
