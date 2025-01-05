@@ -1,4 +1,4 @@
-use crate::{parse::Parse, Connection, Db, Error, Frame, NVResult};
+use crate::{parse::Parse, Connection, Db, Error, Frame, NVResult, Shutdown};
 
 pub mod get;
 pub mod ping;
@@ -8,7 +8,7 @@ pub use get::GetCmd;
 pub use ping::PingCmd;
 pub use set::SetCmd;
 
-pub trait Command {
+pub(crate) trait Command {
     fn parse_frames(parse: &mut Parse) -> NVResult<Self>
     where
         Self: Sized;
@@ -30,7 +30,7 @@ pub enum CommandVariant {
 }
 
 impl CommandVariant {
-    #[tracing::instrument(ret, skip_all)]
+    #[tracing::instrument(ret, skip_all, level = "debug")]
     pub fn from_frame(frame: Frame) -> NVResult<Self> {
         let mut parse = Parse::new(frame)?;
 
@@ -48,11 +48,11 @@ impl CommandVariant {
         Ok(command)
     }
 
-    pub async fn apply(
+    pub(crate) async fn apply(
         self,
         db: &Db,
         dst: &mut Connection,
-        _shutdown: &mut crate::Shutdown,
+        _shutdown: &mut Shutdown,
     ) -> NVResult<()> {
         use CommandVariant as C;
 

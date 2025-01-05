@@ -26,7 +26,7 @@ impl Command for PingCmd {
         }
     }
 
-    #[tracing::instrument(skip(self, _db, dst))]
+    #[tracing::instrument(skip_all)]
     async fn apply(self, _db: &crate::Db, dst: &mut crate::Connection) -> crate::NVResult<()> {
         let response = match self.msg {
             None => Frame::SimpleString("PONG".to_string()),

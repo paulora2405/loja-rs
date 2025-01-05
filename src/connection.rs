@@ -5,6 +5,7 @@ use crate::{Error, NVResult};
 use bytes::{Buf, BytesMut};
 use tokio::io::{AsyncReadExt, AsyncWriteExt, BufWriter};
 use tokio::net::TcpStream;
+use tracing::{debug, error};
 
 const DEFAULT_BUFFER_SIZE: usize = 16 * 1024;
 
@@ -47,11 +48,13 @@ impl Connection {
     /// On success, the received frame is returned. If the `TcpStream`
     /// is closed in a way that doesn't break a frame in half, it returns
     /// `None`. Otherwise, an error is returned.
+    #[tracing::instrument(skip_all)]
     pub async fn read_frame(&mut self) -> NVResult<Option<Frame>> {
         loop {
             // Attempt to parse a frame from the buffered data. If enough data
             // has been buffered, the frame is returned.
             if let Some(frame) = self.parse_frame()? {
+                debug!(?frame, "frame received");
                 return Ok(Some(frame));
             }
 
@@ -66,8 +69,10 @@ impl Connection {
                 // there is, this means that the peer closed the socket while
                 // sending a frame.
                 if self.buffer.is_empty() {
+                    debug!("no more frames to read from the buffer");
                     return Ok(None);
                 } else {
+                    error!("connection was closed mid frame");
                     return Err(Error::Io(std::io::Error::new(
                         std::io::ErrorKind::ConnectionReset,
                         "connection was closed mid frame",

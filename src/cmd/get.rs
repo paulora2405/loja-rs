@@ -31,7 +31,7 @@ impl Command for GetCmd {
 
     #[tracing::instrument(skip_all)]
     async fn apply(self, db: &crate::Db, dst: &mut crate::Connection) -> NVResult<()> {
-        let response = if let Some(value) = db.read().await.get(&self.key) {
+        let response = if let Some(value) = db.get(&self.key) {
             Frame::BulkString(value.clone())
         } else {
             Frame::Null
