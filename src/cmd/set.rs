@@ -1,48 +1,133 @@
+use super::Command;
+use crate::{Error, Frame, NVResult};
 use bytes::Bytes;
+use std::time::Duration;
 use tracing::debug;
 
-use super::Command;
-use crate::{Frame, NVResult};
-
+/// Set `key` to hold the string `value`.
+///
+/// If `key` already holds a value, it is overwritten, regardless of its type.
+/// Any previous time to live associated with the key is discarded on successful
+/// SET operation.
+///
+/// # Options
+///
+/// Currently, the following options are supported:
+///
+/// * EX `seconds` -- Set the specified expire time, in seconds.
+/// * PX `milliseconds` -- Set the specified expire time, in milliseconds.
 #[derive(Debug)]
 pub struct SetCmd {
+    /// The lookup key.
     key: String,
+    /// The value to be stored.
     value: Bytes,
-    // TODO: Add the expire field
+    /// When to expire the key.
+    expire: Option<Duration>,
 }
 
 impl SetCmd {
-    pub fn new(key: impl ToString, value: Bytes) -> SetCmd {
+    /// Create a new `Set` command which sets `key` to `value`.
+    ///
+    /// If `expire` is `Some`, the value should expire after the specified
+    /// duration.
+    pub fn new(key: impl ToString, value: Bytes, expire: Option<Duration>) -> SetCmd {
         SetCmd {
             key: key.to_string(),
             value,
+            expire,
         }
     }
 
+    /// Get the key.
     pub fn key(&self) -> &str {
         &self.key
     }
 
+    /// Get the value.
     pub fn value(&self) -> &Bytes {
         &self.value
+    }
+
+    /// Get the expire duration.
+    pub fn expire(&self) -> Option<Duration> {
+        self.expire
     }
 }
 
 impl Command for SetCmd {
+    /// Parse a `Set` instance from a received frame.
+    ///
+    /// The `Parse` argument provides a cursor-like API to read fields from the
+    /// `Frame`. At this point, the entire frame has already been received from
+    /// the socket.
+    ///
+    /// The `SET` string has already been consumed.
+    ///
+    /// # Returns
+    ///
+    /// Returns the `Set` value on success. If the frame is malformed, `Err` is
+    /// returned.
+    ///
+    /// # Format
+    ///
+    /// Expects an array frame containing at least 3 entries.
+    ///
+    /// ```text
+    /// SET key value [EX seconds|PX milliseconds]
+    /// ```
     fn parse_frames(parse: &mut crate::parse::Parse) -> NVResult<Self>
     where
         Self: Sized,
     {
         let key = parse.next_string()?;
         let value = parse.next_bytes()?;
-        // TODO: Parse the optional EX or PX arguments
-        Ok(Self { key, value })
+        // The expiration is optional. If nothing else follows,
+        // then it is `None`.
+        let mut expire = None;
+
+        // Attempt to parse another string.
+        match parse.next_string() {
+            Ok(s) if s.to_uppercase() == "EX" => {
+                // The expiration is specified in seconds.
+                // The next value must be an integer.
+                let secs = parse.next_int()?;
+                expire = Some(Duration::from_secs(secs));
+            }
+            Ok(s) if s.to_uppercase() == "PX" => {
+                // The expiration is specified in milliseconds.
+                // The next value must be an integer.
+                let ms = parse.next_int()?;
+                expire = Some(Duration::from_millis(ms));
+            }
+            // Currently, we don't support any of the other SET
+            // options. An error here results in the connection being
+            // terminated. Other connections will continue to operate normally.
+            Ok(_) => {
+                return Err(Error::Protocol(
+                    "currently, `SET` only supports the expiration option".into(),
+                ))
+            }
+            // The `Error::EndOfStream` error indicates there is no further data to
+            // parse. In this case, it is a normal run time situation and
+            // indicates there are no specified `SET` options.
+            Err(Error::EndOfStream) => {}
+            // All other errors are bubbled up, resulting in the connection
+            // being terminated.
+            Err(err) => return Err(err),
+        }
+
+        Ok(Self { key, value, expire })
     }
 
+    /// Apply the `SetCmd` command to the specified `Db` instance.
+    ///
+    /// The response is written to `dst`. This is called by the server in order
+    /// to execute a received command.
     #[tracing::instrument(skip_all)]
     async fn apply(self, db: &crate::Db, dst: &mut crate::Connection) -> NVResult<()> {
         {
-            db.set(self.key, self.value, None);
+            db.set(self.key, self.value, self.expire);
         }
         let response = Frame::SimpleString("OK".to_string());
         debug!(?response);
@@ -50,11 +135,25 @@ impl Command for SetCmd {
         Ok(())
     }
 
+    /// Converts the command into an equivalent `Frame`.
+    ///
+    /// This is called by the client when encoding a `Set` command to send to
+    /// the server.
     fn into_frame(self) -> NVResult<crate::Frame> {
         let mut frame = Frame::array();
         frame.push_bulk(Bytes::from("set"))?;
         frame.push_bulk(Bytes::from(self.key))?;
         frame.push_bulk(self.value)?;
+        if let Some(ms) = self.expire {
+            // Expirations in Redis protocol can be specified in two ways
+            // 1. SET key value EX seconds
+            // 2. SET key value PX milliseconds
+            // We use the second option because it allows greater precision and
+            // the client parses the expiration argument as milliseconds
+            // in duration_from_ms_str()
+            frame.push_bulk(Bytes::from("px"))?;
+            frame.push_int(ms.as_millis() as u64)?;
+        }
         Ok(frame)
     }
 }
