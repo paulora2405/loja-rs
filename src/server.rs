@@ -4,13 +4,12 @@
 //! spawning a task per connection.
 
 use crate::{db::DbDropGuard, CommandVariant, Connection, Db, NVResult, Shutdown};
-use anyhow::Context;
-use std::{collections::HashMap, future::Future, sync::Arc, time::Duration};
+use std::{future::Future, sync::Arc, time::Duration};
 use tokio::{
     net::{TcpListener, TcpStream},
-    sync::{broadcast, mpsc, RwLock, Semaphore},
+    sync::{broadcast, mpsc, Semaphore},
 };
-use tracing::{debug, error, info};
+use tracing::{debug, error, info, warn};
 
 /// Server listener state. Created in the `run` call. It includes a `run` method
 /// which performs the TCP listening and initialization of per-connection state.
@@ -253,12 +252,17 @@ impl Listener {
             // Perform the accept operation. If a socket is successfully
             // accepted, return it. Otherwise, save the error.
             match self.listener.accept().await {
-                Ok((socket, _)) => return Ok(socket),
+                Ok((socket, _)) => {
+                    debug!("successfully accepted inbound connection");
+                    return Ok(socket);
+                }
                 Err(err) => {
                     if backoff > 64 {
+                        error!(%err, "failed to accept inbound connection too many times");
                         // Accept has failed to many times. Return the error.
                         return Err(err.into());
                     }
+                    warn!(%err, "got error accepting inbound connection, trying again in {backoff} seconds");
                 }
             }
 
