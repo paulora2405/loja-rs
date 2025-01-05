@@ -120,7 +120,7 @@ impl Connection {
     /// full, it is flushed to the underlying socket.
     pub async fn write_frame(&mut self, frame: &Frame) -> NVResult<()> {
         // Arrays are encoded by encoding each entry. All other frame types are
-        // considered literals. For now, mini-redis is not able to encode
+        // considered literals. For now, we do not encode
         // recursive frame structures. See below for more details.
         match frame {
             Frame::Array(val) => {
