@@ -19,4 +19,6 @@ pub enum Error {
     UnknownCommand(String),
     #[error("wrong frame type: {0}")]
     WrongFrameType(String),
+    #[error("response error: {0}")]
+    Response(String),
 }
