@@ -1,5 +1,5 @@
 use anyhow::Context;
-use nano_valkey::{server, DEFAULT_HOST, DEFAULT_PORT};
+use loja::{server, DEFAULT_HOST, DEFAULT_PORT};
 use tokio::net::TcpListener;
 use tracing::info;
 
