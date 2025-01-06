@@ -145,7 +145,7 @@ impl Command for SetCmd {
         frame.push_bulk(Bytes::from(self.key))?;
         frame.push_bulk(self.value)?;
         if let Some(ms) = self.expire {
-            // Expirations in Redis protocol can be specified in two ways
+            // Expirations in RESP can be specified in two ways
             // 1. SET key value EX seconds
             // 2. SET key value PX milliseconds
             // We use the second option because it allows greater precision and

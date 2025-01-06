@@ -68,7 +68,7 @@ struct Handler {
     /// The implementation of the command is in the `cmd` module. Each command
     /// will need to interact with `db` in order to complete the work.
     db: Db,
-    /// The TCP connection decorated with the redis protocol encoder / decoder
+    /// The TCP connection decorated with the RESP encoder / decoder
     /// implemented using a buffered `TcpStream`.
     ///
     /// When `Listener` receives an inbound connection, the `TcpStream` is
@@ -309,7 +309,7 @@ impl Handler {
                 None => return Ok(()),
             };
 
-            // Convert the redis frame into a `CommandVariant` struct. This returns an
+            // Convert the RESP frame into a `CommandVariant` struct. This returns an
             // error if the frame is not a valid redis command or it is an
             // unsupported command.
             let cmd = CommandVariant::from_frame(frame)?;
