@@ -170,6 +170,35 @@ fn get_line<'a>(src: &'a mut Cursor<&[u8]>) -> NVResult<&'a [u8]> {
     Err(Error::IncompleteFrame)
 }
 
+impl std::fmt::Display for Frame {
+    fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
+        use std::str;
+
+        match self {
+            Frame::SimpleString(response) => response.fmt(fmt),
+            Frame::SimpleError(msg) => write!(fmt, "error: {}", msg),
+            Frame::Integer(num) => num.fmt(fmt),
+            Frame::BulkString(msg) => match str::from_utf8(msg) {
+                Ok(string) => string.fmt(fmt),
+                Err(_) => write!(fmt, "{:?}", msg),
+            },
+            Frame::Null => "(nil)".fmt(fmt),
+            Frame::Array(parts) => {
+                for (i, part) in parts.iter().enumerate() {
+                    if i > 0 {
+                        // use space as the array element display separator
+                        write!(fmt, " ")?;
+                    }
+
+                    part.fmt(fmt)?;
+                }
+
+                Ok(())
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
