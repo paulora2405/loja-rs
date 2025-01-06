@@ -15,10 +15,11 @@ pub(crate) use frame::Frame;
 pub(crate) mod shutdown;
 pub(crate) use shutdown::Shutdown;
 
+pub mod clients;
+pub use clients::Client;
+
 pub mod cmd;
 pub use cmd::CommandVariant;
-
-pub mod clients;
 
 pub mod server;
 
