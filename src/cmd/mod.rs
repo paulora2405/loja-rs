@@ -1,4 +1,4 @@
-use crate::{parse::Parse, Connection, Db, Error, Frame, NVResult, Shutdown};
+use crate::{parse::Parse, Connection, Db, Error, Frame, LResult, Shutdown};
 
 pub mod get;
 pub use get::GetCmd;
@@ -10,7 +10,7 @@ pub mod set;
 pub use set::SetCmd;
 
 pub(crate) trait Command {
-    fn parse_frames(parse: &mut Parse) -> NVResult<Self>
+    fn parse_frames(parse: &mut Parse) -> LResult<Self>
     where
         Self: Sized;
 
@@ -18,9 +18,9 @@ pub(crate) trait Command {
         self,
         db: &Db,
         dst: &mut Connection,
-    ) -> impl std::future::Future<Output = NVResult<()>> + Send;
+    ) -> impl std::future::Future<Output = LResult<()>> + Send;
 
-    fn into_frame(self) -> NVResult<Frame>;
+    fn into_frame(self) -> LResult<Frame>;
 }
 
 #[derive(Debug)]
@@ -32,7 +32,7 @@ pub enum CommandVariant {
 
 impl CommandVariant {
     #[tracing::instrument(ret, skip_all, level = "debug")]
-    pub fn from_frame(frame: Frame) -> NVResult<Self> {
+    pub fn from_frame(frame: Frame) -> LResult<Self> {
         let mut parse = Parse::new(frame)?;
 
         let command_name = parse.next_string()?.to_lowercase();
@@ -54,7 +54,7 @@ impl CommandVariant {
         db: &Db,
         dst: &mut Connection,
         _shutdown: &mut Shutdown,
-    ) -> NVResult<()> {
+    ) -> LResult<()> {
         use CommandVariant as C;
 
         match self {

@@ -1,5 +1,5 @@
 use super::Command;
-use crate::{Error, Frame, NVResult};
+use crate::{Error, Frame, LResult};
 use bytes::Bytes;
 use std::time::Duration;
 use tracing::debug;
@@ -76,7 +76,7 @@ impl Command for SetCmd {
     /// ```text
     /// SET key value [EX seconds|PX milliseconds]
     /// ```
-    fn parse_frames(parse: &mut crate::parse::Parse) -> NVResult<Self>
+    fn parse_frames(parse: &mut crate::parse::Parse) -> LResult<Self>
     where
         Self: Sized,
     {
@@ -125,7 +125,7 @@ impl Command for SetCmd {
     /// The response is written to `dst`. This is called by the server in order
     /// to execute a received command.
     #[tracing::instrument(skip_all)]
-    async fn apply(self, db: &crate::Db, dst: &mut crate::Connection) -> NVResult<()> {
+    async fn apply(self, db: &crate::Db, dst: &mut crate::Connection) -> LResult<()> {
         {
             db.set(self.key, self.value, self.expire);
         }
@@ -139,7 +139,7 @@ impl Command for SetCmd {
     ///
     /// This is called by the client when encoding a `Set` command to send to
     /// the server.
-    fn into_frame(self) -> NVResult<crate::Frame> {
+    fn into_frame(self) -> LResult<crate::Frame> {
         let mut frame = Frame::array();
         frame.push_bulk(Bytes::from("set"))?;
         frame.push_bulk(Bytes::from(self.key))?;

@@ -25,4 +25,4 @@ pub mod server;
 pub const DEFAULT_PORT: u16 = 6379;
 pub const DEFAULT_HOST: &str = "0.0.0.0";
 
-type NVResult<T> = std::result::Result<T, crate::error::Error>;
+pub type LResult<T> = std::result::Result<T, crate::error::Error>;

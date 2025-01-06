@@ -3,7 +3,7 @@
 //! Provides an async `run` function that listens for inbound connections,
 //! spawning a task per connection.
 
-use crate::{db::DbDropGuard, CommandVariant, Connection, Db, NVResult, Shutdown};
+use crate::{db::DbDropGuard, CommandVariant, Connection, Db, LResult, Shutdown};
 use std::{future::Future, sync::Arc, time::Duration};
 use tokio::{
     net::{TcpListener, TcpStream},
@@ -190,7 +190,7 @@ impl Listener {
     /// The process is not able to detect when a transient error resolves
     /// itself. One strategy for handling this is to implement a back off
     /// strategy, which is what we do here.
-    async fn run(&mut self) -> NVResult<()> {
+    async fn run(&mut self) -> LResult<()> {
         info!("accepting inbound connections");
 
         loop {
@@ -244,7 +244,7 @@ impl Listener {
     /// After the second failure, the task waits for 2 seconds. Each subsequent
     /// failure doubles the wait time. If accepting fails on the 6th try after
     /// waiting for 64 seconds, then this function returns with an error.
-    async fn accept(&mut self) -> NVResult<TcpStream> {
+    async fn accept(&mut self) -> LResult<TcpStream> {
         let mut backoff = 1;
 
         // Try to accept a few times
@@ -289,7 +289,7 @@ impl Handler {
     /// When the shutdown signal is received, the connection is processed until
     /// it reaches a safe state, at which point it is terminated.
     #[tracing::instrument(skip_all)]
-    async fn run(&mut self) -> NVResult<()> {
+    async fn run(&mut self) -> LResult<()> {
         // As long as the shutdown signal has not been received,
         // try to process a new request frame.
         while !self.shutdown.is_shutdown() {

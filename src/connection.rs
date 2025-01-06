@@ -1,7 +1,7 @@
 use std::io::Cursor;
 
 use crate::frame::Frame;
-use crate::{Error, NVResult};
+use crate::{Error, LResult};
 use bytes::{Buf, BytesMut};
 use tokio::io::{AsyncReadExt, AsyncWriteExt, BufWriter};
 use tokio::net::TcpStream;
@@ -49,7 +49,7 @@ impl Connection {
     /// is closed in a way that doesn't break a frame in half, it returns
     /// `None`. Otherwise, an error is returned.
     #[tracing::instrument(skip_all)]
-    pub async fn read_frame(&mut self) -> NVResult<Option<Frame>> {
+    pub async fn read_frame(&mut self) -> LResult<Option<Frame>> {
         loop {
             // Attempt to parse a frame from the buffered data. If enough data
             // has been buffered, the frame is returned.
@@ -88,7 +88,7 @@ impl Connection {
     /// `Ok(None)` is returned.
     ///
     /// Any other errors are returned as is.
-    fn parse_frame(&mut self) -> NVResult<Option<Frame>> {
+    fn parse_frame(&mut self) -> LResult<Option<Frame>> {
         let mut buf = Cursor::new(&self.buffer[..]);
 
         match Frame::check(&mut buf) {
@@ -118,7 +118,7 @@ impl Connection {
     /// syscalls. However, it is fine to call these functions on a *buffered*
     /// write stream. The data will be written to the buffer. Once the buffer is
     /// full, it is flushed to the underlying socket.
-    pub async fn write_frame(&mut self, frame: &Frame) -> NVResult<()> {
+    pub async fn write_frame(&mut self, frame: &Frame) -> LResult<()> {
         // Arrays are encoded by encoding each entry. All other frame types are
         // considered literals. For now, we do not encode
         // recursive frame structures. See below for more details.

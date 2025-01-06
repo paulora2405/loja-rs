@@ -1,5 +1,5 @@
 use super::Command;
-use crate::{parse::Parse, Frame, NVResult};
+use crate::{parse::Parse, Frame, LResult};
 use bytes::Bytes;
 use tracing::debug;
 
@@ -21,7 +21,7 @@ impl GetCmd {
 }
 
 impl Command for GetCmd {
-    fn parse_frames(parse: &mut Parse) -> NVResult<Self>
+    fn parse_frames(parse: &mut Parse) -> LResult<Self>
     where
         Self: Sized,
     {
@@ -30,7 +30,7 @@ impl Command for GetCmd {
     }
 
     #[tracing::instrument(skip_all)]
-    async fn apply(self, db: &crate::Db, dst: &mut crate::Connection) -> NVResult<()> {
+    async fn apply(self, db: &crate::Db, dst: &mut crate::Connection) -> LResult<()> {
         let response = if let Some(value) = db.get(&self.key) {
             Frame::BulkString(value.clone())
         } else {
@@ -44,7 +44,7 @@ impl Command for GetCmd {
         Ok(())
     }
 
-    fn into_frame(self) -> NVResult<crate::Frame> {
+    fn into_frame(self) -> LResult<crate::Frame> {
         let mut frame = Frame::array();
         frame.push_bulk(Bytes::from("get"))?;
         frame.push_bulk(Bytes::from(self.key))?;

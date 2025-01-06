@@ -1,4 +1,4 @@
-use crate::{Error, NVResult};
+use crate::{Error, LResult};
 use bytes::{Buf, Bytes};
 use std::io::Cursor;
 
@@ -17,7 +17,7 @@ pub enum Frame {
 }
 
 impl Frame {
-    pub fn check(src: &mut Cursor<&[u8]>) -> NVResult<()> {
+    pub fn check(src: &mut Cursor<&[u8]>) -> LResult<()> {
         match get_u8(src)? {
             b'+' | b'-' => {
                 get_line(src)?;
@@ -49,7 +49,7 @@ impl Frame {
         }
     }
 
-    pub fn parse(src: &mut Cursor<&[u8]>) -> NVResult<Frame> {
+    pub fn parse(src: &mut Cursor<&[u8]>) -> LResult<Frame> {
         // The first byte of the frame indicates the data type.
         match get_u8(src)? {
             b'+' => {
@@ -100,7 +100,7 @@ impl Frame {
         Frame::Array(vec![])
     }
 
-    pub(crate) fn push_bulk(&mut self, bytes: Bytes) -> NVResult<()> {
+    pub(crate) fn push_bulk(&mut self, bytes: Bytes) -> LResult<()> {
         match self {
             Frame::Array(vec) => {
                 vec.push(Frame::BulkString(bytes));
@@ -113,7 +113,7 @@ impl Frame {
         }
     }
 
-    pub(crate) fn push_int(&mut self, value: u64) -> NVResult<()> {
+    pub(crate) fn push_int(&mut self, value: u64) -> LResult<()> {
         match self {
             Frame::Array(vec) => {
                 vec.push(Frame::Integer(value));
@@ -127,21 +127,21 @@ impl Frame {
     }
 }
 
-fn get_u8(src: &mut Cursor<&[u8]>) -> NVResult<u8> {
+fn get_u8(src: &mut Cursor<&[u8]>) -> LResult<u8> {
     if !src.has_remaining() {
         return Err(Error::IncompleteFrame);
     }
     Ok(src.get_u8())
 }
 
-fn peek_u8(src: &mut Cursor<&[u8]>) -> NVResult<u8> {
+fn peek_u8(src: &mut Cursor<&[u8]>) -> LResult<u8> {
     if !src.has_remaining() {
         return Err(Error::IncompleteFrame);
     }
     Ok(src.chunk()[0])
 }
 
-fn skip(src: &mut Cursor<&[u8]>, n: usize) -> NVResult<()> {
+fn skip(src: &mut Cursor<&[u8]>, n: usize) -> LResult<()> {
     if src.remaining() < n {
         return Err(Error::IncompleteFrame);
     }
@@ -149,7 +149,7 @@ fn skip(src: &mut Cursor<&[u8]>, n: usize) -> NVResult<()> {
     Ok(())
 }
 
-fn get_decimal(src: &mut Cursor<&[u8]>) -> NVResult<u64> {
+fn get_decimal(src: &mut Cursor<&[u8]>) -> LResult<u64> {
     use atoi::atoi;
 
     let line = get_line(src)?;
@@ -157,7 +157,7 @@ fn get_decimal(src: &mut Cursor<&[u8]>) -> NVResult<u64> {
     atoi(line).ok_or(Error::Protocol("invalid frame format".into()))
 }
 
-fn get_line<'a>(src: &'a mut Cursor<&[u8]>) -> NVResult<&'a [u8]> {
+fn get_line<'a>(src: &'a mut Cursor<&[u8]>) -> LResult<&'a [u8]> {
     let start = src.position() as usize;
     let end = src.get_ref().len() - 1;
 
