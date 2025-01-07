@@ -12,9 +12,7 @@ use crate::{
 /// Established connection with a Redis server.
 ///
 /// Backed by a single `TcpStream`, `Client` provides basic network client
-/// functionality (no pooling, retrying, ...). Connections are established using
-/// the [`connect`](fn@connect) function.
-///
+/// functionality (no pooling, retrying, ...).
 /// Requests are issued using the various methods of `Client`.
 #[derive(Debug)]
 pub struct Client {
@@ -34,7 +32,7 @@ impl Client {
     /// `addr` may be any type that can be asynchronously converted to a
     /// `SocketAddr`. This includes `SocketAddr` and strings. The `ToSocketAddrs`
     /// trait is the Tokio version and not the `std` version.
-    pub async fn connect<T: ToSocketAddrs>(addr: T) -> LResult<Self> {
+    pub async fn connect(addr: impl ToSocketAddrs) -> LResult<Self> {
         // The `addr` argument is passed directly to `TcpStream::connect`. This
         // performs any asynchronous DNS lookup and attempts to establish the TCP
         // connection. An error at either step returns an error, which is then
