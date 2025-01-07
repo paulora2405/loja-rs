@@ -15,6 +15,10 @@ impl PingCmd {
     pub fn new(msg: Option<Bytes>) -> Self {
         Self { msg }
     }
+
+    pub(crate) fn msg(&self) -> Option<&Bytes> {
+        self.msg.as_ref()
+    }
 }
 
 impl Command for PingCmd {
