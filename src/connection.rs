@@ -1,10 +1,8 @@
-use std::io::Cursor;
-
 use crate::frame::Frame;
 use crate::{Error, LResult};
 use bytes::{Buf, BytesMut};
-use tokio::io::{AsyncReadExt, AsyncWriteExt, BufWriter};
-use tokio::net::TcpStream;
+use std::io::Cursor;
+use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, BufWriter};
 use tracing::{debug, error};
 
 const DEFAULT_BUFFER_SIZE: usize = 16 * 1024;
@@ -18,19 +16,25 @@ const DEFAULT_BUFFER_SIZE: usize = 16 * 1024;
 /// When sending frames, the frame is first encoded into the write buffer.
 /// The contents of the write buffer are then written to the socket.
 #[derive(Debug)]
-pub struct Connection {
-    /// `TcpStream` wrapped with a `BufWriter` for buffering writes.
-    stream: BufWriter<TcpStream>,
+pub(crate) struct Connection<S> {
+    /// Stream wrapped with a `BufWriter` for buffering writes.
+    stream: BufWriter<S>,
     /// Buffer used for reading frames.
     // TODO: Look into `tokio_util::codec` and implementing my own codec for decoding and enco
     buffer: BytesMut,
 }
 
-impl Connection {
+/// A trait for types that can be used as a connection stream.
+pub(crate) trait ConnectionStream: AsyncRead + AsyncWrite + Unpin + Send {}
+
+// Blanket implementation for all types that implement `AsyncRead + AsyncWrite + Unpin + Send`.
+impl<T: AsyncRead + AsyncWrite + Unpin + Send> ConnectionStream for T {}
+
+impl<S: ConnectionStream> Connection<S> {
     /// Create a new `Connection` from a `TcpStream` socket.
     ///
     /// The connection is internally buffered, with a default buffer size of 16KB.
-    pub fn new(socket: TcpStream) -> Self {
+    pub fn new(socket: S) -> Self {
         Self {
             stream: BufWriter::new(socket),
             buffer: BytesMut::with_capacity(DEFAULT_BUFFER_SIZE),

@@ -1,13 +1,11 @@
-use std::time::Duration;
-
-use bytes::Bytes;
-use tokio::net::{TcpStream, ToSocketAddrs};
-use tracing::debug;
-
 use crate::{
     cmd::{Command, GetCmd, PingCmd, SetCmd},
     Connection, Error, Frame, LResult,
 };
+use bytes::Bytes;
+use std::time::Duration;
+use tokio::net::{TcpStream, ToSocketAddrs};
+use tracing::debug;
 
 /// Established connection with a Redis server.
 ///
@@ -15,7 +13,7 @@ use crate::{
 /// functionality (no pooling, retrying, ...).
 /// Requests are issued using the various methods of `Client`.
 #[derive(Debug)]
-pub struct Client {
+pub struct Client<S> {
     /// The TCP connection decorated with the RESP encoder / decoder
     /// implemented using a buffered `TcpStream`.
     ///
@@ -23,10 +21,10 @@ pub struct Client {
     /// passed to `Connection::new`, which initializes the associated buffers.
     /// `Connection` allows the handler to operate at the "frame" level and keep
     /// the byte level protocol parsing details encapsulated in `Connection`.
-    connection: Connection,
+    connection: Connection<S>,
 }
 
-impl Client {
+impl Client<TcpStream> {
     /// Establish a connection with the Redis server located at `addr`.
     ///
     /// `addr` may be any type that can be asynchronously converted to a
@@ -40,7 +38,7 @@ impl Client {
         let socket = TcpStream::connect(addr).await?;
         // Initialize a new `Connection` with the `TcpStream`.
         // This allocates read/write buffers to perform RESP frame parsing.
-        let connection = Connection::new(socket);
+        let connection = Connection::<_>::new(socket);
         Ok(Client { connection })
     }
 

@@ -2,6 +2,7 @@ mod parse;
 
 pub(crate) mod connection;
 pub(crate) use connection::Connection;
+pub(crate) use connection::ConnectionStream;
 
 pub(crate) mod db;
 pub(crate) use db::Db;

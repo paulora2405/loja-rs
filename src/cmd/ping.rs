@@ -1,5 +1,5 @@
 use super::Command;
-use crate::Frame;
+use crate::{ConnectionStream, Frame};
 use bytes::Bytes;
 use tracing::debug;
 
@@ -27,7 +27,11 @@ impl Command for PingCmd {
     }
 
     #[tracing::instrument(skip_all)]
-    async fn apply(self, _db: &crate::Db, dst: &mut crate::Connection) -> crate::LResult<()> {
+    async fn apply<S: ConnectionStream>(
+        self,
+        _db: &crate::Db,
+        dst: &mut crate::Connection<S>,
+    ) -> crate::LResult<()> {
         let response = match self.msg {
             None => Frame::SimpleString("PONG".to_string()),
             Some(msg) => Frame::BulkString(msg),

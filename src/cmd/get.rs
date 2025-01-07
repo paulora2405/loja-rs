@@ -1,5 +1,5 @@
 use super::Command;
-use crate::{parse::Parse, Frame, LResult};
+use crate::{parse::Parse, ConnectionStream, Frame, LResult};
 use bytes::Bytes;
 use tracing::debug;
 
@@ -30,7 +30,11 @@ impl Command for GetCmd {
     }
 
     #[tracing::instrument(skip_all)]
-    async fn apply(self, db: &crate::Db, dst: &mut crate::Connection) -> LResult<()> {
+    async fn apply<S: ConnectionStream>(
+        self,
+        db: &crate::Db,
+        dst: &mut crate::Connection<S>,
+    ) -> LResult<()> {
         let response = if let Some(value) = db.get(&self.key) {
             Frame::BulkString(value.clone())
         } else {

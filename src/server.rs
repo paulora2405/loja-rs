@@ -61,7 +61,7 @@ struct Listener {
 /// Per-connection handler. Reads requests from `connection` and applies the
 /// commands to `db`.
 #[derive(Debug)]
-struct Handler {
+struct Handler<S> {
     /// Shared database handle.
     ///
     /// When a command is received from `connection`, it is applied with `db`.
@@ -75,7 +75,7 @@ struct Handler {
     /// passed to `Connection::new`, which initializes the associated buffers.
     /// `Connection` allows the handler to operate at the "frame" level and keep
     /// the byte level protocol parsing details encapsulated in `Connection`.
-    connection: Connection,
+    connection: Connection<S>,
     /// Listen for shutdown notifications.
     ///
     /// A wrapper around the `broadcast::Receiver` paired with the sender in
@@ -275,7 +275,7 @@ impl Listener {
     }
 }
 
-impl Handler {
+impl Handler<TcpStream> {
     /// Process a single connection.
     ///
     /// Request frames are read from the socket and processed. Responses are

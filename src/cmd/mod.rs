@@ -1,4 +1,4 @@
-use crate::{parse::Parse, Connection, Db, Error, Frame, LResult, Shutdown};
+use crate::{parse::Parse, Connection, ConnectionStream, Db, Error, Frame, LResult, Shutdown};
 
 pub mod get;
 pub use get::GetCmd;
@@ -14,10 +14,10 @@ pub(crate) trait Command {
     where
         Self: Sized;
 
-    fn apply(
+    fn apply<S: ConnectionStream>(
         self,
         db: &Db,
-        dst: &mut Connection,
+        dst: &mut Connection<S>,
     ) -> impl std::future::Future<Output = LResult<()>> + Send;
 
     fn into_frame(self) -> LResult<Frame>;
@@ -49,10 +49,10 @@ impl CommandVariant {
         Ok(command)
     }
 
-    pub(crate) async fn apply(
+    pub(crate) async fn apply<S: ConnectionStream>(
         self,
         db: &Db,
-        dst: &mut Connection,
+        dst: &mut Connection<S>,
         _shutdown: &mut Shutdown,
     ) -> LResult<()> {
         use CommandVariant as C;

@@ -1,5 +1,5 @@
 use super::Command;
-use crate::{Error, Frame, LResult};
+use crate::{ConnectionStream, Error, Frame, LResult};
 use bytes::Bytes;
 use std::time::Duration;
 use tracing::debug;
@@ -125,7 +125,11 @@ impl Command for SetCmd {
     /// The response is written to `dst`. This is called by the server in order
     /// to execute a received command.
     #[tracing::instrument(skip_all)]
-    async fn apply(self, db: &crate::Db, dst: &mut crate::Connection) -> LResult<()> {
+    async fn apply<S: ConnectionStream>(
+        self,
+        db: &crate::Db,
+        dst: &mut crate::Connection<S>,
+    ) -> LResult<()> {
         {
             db.set(self.key, self.value, self.expire);
         }
