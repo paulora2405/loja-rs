@@ -31,8 +31,8 @@ impl SetCmd {
     ///
     /// If `expire` is `Some`, the value should expire after the specified
     /// duration.
-    pub fn new(key: impl ToString, value: Bytes, expire: Option<Duration>) -> SetCmd {
-        SetCmd {
+    pub fn new(key: impl ToString, value: Bytes, expire: Option<Duration>) -> Self {
+        Self {
             key: key.to_string(),
             value,
             expire,

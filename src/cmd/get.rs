@@ -9,8 +9,8 @@ pub struct GetCmd {
 }
 
 impl GetCmd {
-    pub fn new(key: impl ToString) -> GetCmd {
-        GetCmd {
+    pub fn new(key: impl ToString) -> Self {
+        Self {
             key: key.to_string(),
         }
     }

@@ -9,8 +9,8 @@ pub struct PingCmd {
 }
 
 impl PingCmd {
-    pub fn new(msg: Option<Bytes>) -> PingCmd {
-        PingCmd { msg }
+    pub fn new(msg: Option<Bytes>) -> Self {
+        Self { msg }
     }
 }
 
