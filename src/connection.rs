@@ -119,29 +119,20 @@ impl<S: ConnectionStream> Connection<S> {
     ///
     /// The `Frame` value is written to the socket using the various `write_*`
     /// functions provided by `AsyncWrite`. Calling these functions directly on
-    /// a `TcpStream` is **not** advised, as this will result in a large number of
-    /// syscalls. However, it is fine to call these functions on a *buffered*
+    /// a [`TcpStream`], for example, is **not** advised,
+    /// as this will result in a large number of syscalls.
+    /// However, it is fine to call these functions on a *buffered*
     /// write stream. The data will be written to the buffer. Once the buffer is
     /// full, it is flushed to the underlying socket.
     pub async fn write_frame(&mut self, frame: &Frame) -> Result<()> {
-        // Arrays are encoded by encoding each entry. All other frame types are
-        // considered literals. For now, we do not encode
-        // recursive frame structures. See below for more details.
-        match frame {
-            Frame::Array(val) => {
-                self.stream.write_u8(b'*').await?;
-                self.write_decimal(val.len() as u64).await?;
-                for entry in &**val {
-                    self.write_value(entry).await?;
-                }
-            }
-            _ => self.write_value(frame).await?,
-        };
-
+        self.write_value(frame).await?;
         self.stream.flush().await.map_err(Error::from)
     }
 
+    #[tracing::instrument(skip(self))]
+    #[async_recursion::async_recursion]
     async fn write_value(&mut self, frame: &Frame) -> std::io::Result<()> {
+        debug!(?frame);
         match frame {
             Frame::SimpleString(val) => {
                 self.stream.write_u8(b'+').await?;
@@ -168,11 +159,13 @@ impl<S: ConnectionStream> Connection<S> {
             Frame::Null => {
                 self.stream.write_all(b"$-1\r\n").await?;
             }
-            // Encoding an `Array` from within a value cannot be done using a
-            // recursive strategy. In general, async fns do not support
-            // recursion. We do not need to encode nested arrays yet,
-            // so for now it is skipped.
-            Frame::Array(_val) => unimplemented!(),
+            Frame::Array(frames) => {
+                self.stream.write_u8(b'*').await?;
+                self.write_decimal(frames.len() as u64).await?;
+                for frame in frames {
+                    self.write_value(frame).await?;
+                }
+            }
         };
 
         Ok(())
@@ -191,5 +184,72 @@ impl<S: ConnectionStream> Connection<S> {
         self.stream.write_all(b"\r\n").await?;
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use bytes::Bytes;
+
+    #[tokio::test]
+    #[tracing_test::traced_test]
+    async fn test_read_write_frame() {
+        let bytes_frames: &[(&[u8], Frame)] = &[
+            // simple string
+            (b"+OK\r\n", Frame::SimpleString("OK".to_string())),
+            // simple error
+            (
+                b"-ERR unknown command 'foobar'\r\n",
+                Frame::SimpleError("ERR unknown command 'foobar'".to_string()),
+            ),
+            // integer
+            (b":1234\r\n", Frame::Integer(1234)),
+            // null bulk strig
+            (b"$-1\r\n", Frame::Null),
+            // bulk string
+            (b"$4\r\nping\r\n", Frame::BulkString(Bytes::from("ping"))),
+            (
+                // simple array
+                b"*2\r\n+OK\r\n$6\r\nfoobar\r\n",
+                Frame::Array(vec![
+                    Frame::SimpleString("OK".to_string()),
+                    Frame::BulkString(Bytes::from("foobar")),
+                ]),
+            ),
+            (
+                // nested array
+                b"*2\r\n*2\r\n+OK\r\n$6\r\nfoobar\r\n$3\r\nbaz\r\n",
+                Frame::Array(vec![
+                    Frame::Array(vec![
+                        Frame::SimpleString("OK".to_string()),
+                        Frame::BulkString(Bytes::from("foobar")),
+                    ]),
+                    Frame::BulkString(Bytes::from("baz")),
+                ]),
+            ),
+        ];
+
+        // create a mock stream that expects the bytes in the test to be both read and written
+        let stream = bytes_frames
+            .iter()
+            .fold(tokio_test::io::Builder::new(), |mut acc, (bytes, _f)| {
+                acc.read(bytes);
+                acc.write(bytes);
+                acc
+            })
+            .build();
+        // create a new connection with the mocket stream
+        let mut conn = Connection::new(stream);
+
+        for (_b, frame) in bytes_frames {
+            // read a frame from the connection, which the mock stream is expecting
+            let received = conn.read_frame().await.unwrap().unwrap();
+            // assert the frame read is the equivalent to the binary representation
+            assert_eq!(received, *frame);
+            // write the same frame, which the mock stream is expecting, and will panic
+            // if the frame is not written as it should be
+            conn.write_frame(frame).await.unwrap();
+        }
     }
 }
