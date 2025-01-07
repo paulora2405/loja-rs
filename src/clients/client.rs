@@ -1,3 +1,4 @@
+//! A Redis client implementation over a [`TcpStream`].
 use crate::{
     cmd::{Command, GetCmd, PingCmd, SetCmd},
     Connection, Error, Frame, LResult,

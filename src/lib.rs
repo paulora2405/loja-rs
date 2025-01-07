@@ -1,3 +1,5 @@
+#![deny(missing_docs)]
+//! A simple Redis clone written in Rust.
 mod parse;
 
 pub(crate) mod connection;
@@ -24,7 +26,10 @@ pub use cmd::CommandVariant;
 
 pub mod server;
 
+/// The default port for the server to bind to.
 pub const DEFAULT_PORT: u16 = 6379;
+/// The default host/interface for the server to bind to.
 pub const DEFAULT_HOST: &str = "0.0.0.0";
 
+/// A type alias for the result of a function that may return a [`Error`].
 pub type LResult<T> = std::result::Result<T, crate::error::Error>;

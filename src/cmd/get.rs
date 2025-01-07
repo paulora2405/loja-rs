@@ -1,20 +1,26 @@
+//! Implementation of the `GET` command.
 use super::Command;
 use crate::{parse::Parse, ConnectionStream, Frame, LResult};
 use bytes::Bytes;
 use tracing::debug;
 
+/// Get a `value` for a given `key`.
+///
+/// If the key does not exist, a `Null` RESP type is returned.
 #[derive(Debug)]
 pub struct GetCmd {
     key: String,
 }
 
 impl GetCmd {
+    /// Creates a new [`GetCmd`] command.
     pub fn new(key: impl ToString) -> Self {
         Self {
             key: key.to_string(),
         }
     }
 
+    /// Returns a reference to the key.
     pub fn key(&self) -> &str {
         &self.key
     }

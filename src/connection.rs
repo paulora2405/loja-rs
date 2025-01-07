@@ -1,3 +1,4 @@
+//! A module for handling the connection to a stream, usually a remote peer via a [`TcpStream`].
 use crate::frame::Frame;
 use crate::{Error, LResult};
 use bytes::{Buf, BytesMut};

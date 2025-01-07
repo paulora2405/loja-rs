@@ -1,14 +1,17 @@
+//! Implementation of the `PING` command.
 use super::Command;
 use crate::{ConnectionStream, Frame};
 use bytes::Bytes;
 use tracing::debug;
 
+/// Pings the server, which responds with either `PONG` or a provided custom message.
 #[derive(Debug, Default)]
 pub struct PingCmd {
     msg: Option<Bytes>,
 }
 
 impl PingCmd {
+    /// Creates a new [`PingCmd`] command.
     pub fn new(msg: Option<Bytes>) -> Self {
         Self { msg }
     }

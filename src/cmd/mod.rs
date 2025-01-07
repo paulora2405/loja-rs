@@ -1,3 +1,4 @@
+//! Commands module.
 use crate::{parse::Parse, Connection, ConnectionStream, Db, Error, Frame, LResult, Shutdown};
 
 pub mod get;
@@ -23,14 +24,19 @@ pub(crate) trait Command {
     fn into_frame(self) -> LResult<Frame>;
 }
 
+/// All possible command variants.
 #[derive(Debug)]
 pub enum CommandVariant {
+    /// `GET` command.
     Get(GetCmd),
+    /// `SET` command.
     Set(SetCmd),
+    /// `PING` command.
     Ping(PingCmd),
 }
 
 impl CommandVariant {
+    /// Parse a frame into a command variant.
     #[tracing::instrument(ret, skip_all, level = "debug")]
     pub fn from_frame(frame: Frame) -> LResult<Self> {
         let mut parse = Parse::new(frame)?;

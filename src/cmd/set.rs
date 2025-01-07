@@ -1,3 +1,4 @@
+//! Implement the `SET` command.
 use super::Command;
 use crate::{ConnectionStream, Error, Frame, LResult};
 use bytes::Bytes;
