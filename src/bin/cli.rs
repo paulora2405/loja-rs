@@ -1,9 +1,9 @@
 use bytes::Bytes;
-use mini_redis::client;
+use loja::{Client, LResult};
 use tokio::sync::{mpsc, oneshot};
 use tracing::info;
 
-type Responder<T> = oneshot::Sender<mini_redis::Result<T>>;
+type Responder<T> = oneshot::Sender<LResult<T>>;
 #[derive(Debug)]
 enum Command {
     Get {
@@ -55,7 +55,7 @@ async fn main() -> anyhow::Result<()> {
     });
 
     let manager = tokio::spawn(async move {
-        let mut client = client::connect("127.0.0.1:6379").await.unwrap();
+        let mut client = Client::connect("127.0.0.1:6379").await.unwrap();
 
         use Command as C;
         while let Some(cmd) = rx.recv().await {
