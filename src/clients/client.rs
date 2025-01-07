@@ -1,7 +1,7 @@
 //! A Redis client implementation over a [`TcpStream`].
 use crate::{
     cmd::{Command, GetCmd, PingCmd, SetCmd},
-    Connection, Error, Frame, LResult,
+    Connection, Error, Frame, Result,
 };
 use bytes::Bytes;
 use std::time::Duration;
@@ -31,7 +31,7 @@ impl Client<TcpStream> {
     /// `addr` may be any type that can be asynchronously converted to a
     /// `SocketAddr`. This includes `SocketAddr` and strings. The `ToSocketAddrs`
     /// trait is the Tokio version and not the `std` version.
-    pub async fn connect(addr: impl ToSocketAddrs) -> LResult<Self> {
+    pub async fn connect(addr: impl ToSocketAddrs) -> Result<Self> {
         // The `addr` argument is passed directly to `TcpStream::connect`. This
         // performs any asynchronous DNS lookup and attempts to establish the TCP
         // connection. An error at either step returns an error, which is then
@@ -51,7 +51,7 @@ impl Client<TcpStream> {
     /// This command is often used to test if a connection
     /// is still alive, or to measure latency.
     #[tracing::instrument(skip(self))]
-    pub async fn ping(&mut self, msg: Option<Bytes>) -> LResult<Bytes> {
+    pub async fn ping(&mut self, msg: Option<Bytes>) -> Result<Bytes> {
         let frame = PingCmd::new(msg).into_frame()?;
         debug!(request = ?frame);
         self.connection.write_frame(&frame).await?;
@@ -66,7 +66,7 @@ impl Client<TcpStream> {
     ///
     /// If the key does not exist `None` is returned.
     #[tracing::instrument(skip(self))]
-    pub async fn get(&mut self, key: &str) -> LResult<Option<Bytes>> {
+    pub async fn get(&mut self, key: &str) -> Result<Option<Bytes>> {
         let frame = GetCmd::new(key).into_frame()?;
         debug!(request = ?frame);
         // Write the full frame to the socket, waiting if necessary.
@@ -89,7 +89,7 @@ impl Client<TcpStream> {
     ///
     /// If key already holds a value, it is overwritten. Any previous time to
     /// live associated with the key is discarded on successful SET operation.
-    pub async fn set(&mut self, key: &str, val: Bytes) -> LResult<()> {
+    pub async fn set(&mut self, key: &str, val: Bytes) -> Result<()> {
         self.set_cmd(SetCmd::new(key, val, None)).await
     }
 
@@ -102,12 +102,12 @@ impl Client<TcpStream> {
     ///
     /// If key already holds a value, it is overwritten. Any previous time to
     /// live associated with the key is discarded on a successful SET operation.
-    pub async fn set_expires(&mut self, key: &str, val: Bytes, expire: Duration) -> LResult<()> {
+    pub async fn set_expires(&mut self, key: &str, val: Bytes, expire: Duration) -> Result<()> {
         self.set_cmd(SetCmd::new(key, val, Some(expire))).await
     }
 
     /// The core `SET` logic, used by both `set` and `set_expires.
-    async fn set_cmd(&mut self, cmd: SetCmd) -> LResult<()> {
+    async fn set_cmd(&mut self, cmd: SetCmd) -> Result<()> {
         let frame = cmd.into_frame()?;
         debug!(request = ?frame);
         // Write the full frame to the socket, waiting if necessary.
@@ -120,7 +120,7 @@ impl Client<TcpStream> {
         }
     }
 
-    async fn read_response(&mut self) -> LResult<Frame> {
+    async fn read_response(&mut self) -> Result<Frame> {
         let response = self.connection.read_frame().await?;
         debug!(?response);
         match response {

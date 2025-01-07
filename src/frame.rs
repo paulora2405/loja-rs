@@ -1,4 +1,4 @@
-use crate::{Error, LResult};
+use crate::{Error, Result};
 use bytes::{Buf, Bytes};
 use std::io::Cursor;
 
@@ -17,7 +17,7 @@ pub enum Frame {
 }
 
 impl Frame {
-    pub fn check(src: &mut Cursor<&[u8]>) -> LResult<()> {
+    pub fn check(src: &mut Cursor<&[u8]>) -> Result<()> {
         match get_u8(src)? {
             b'+' | b'-' => {
                 get_line(src)?;
@@ -49,7 +49,7 @@ impl Frame {
         }
     }
 
-    pub fn parse(src: &mut Cursor<&[u8]>) -> LResult<Frame> {
+    pub fn parse(src: &mut Cursor<&[u8]>) -> Result<Frame> {
         // The first byte of the frame indicates the data type.
         match get_u8(src)? {
             b'+' => {
@@ -100,7 +100,7 @@ impl Frame {
         Frame::Array(vec![])
     }
 
-    pub(crate) fn push_bulk(&mut self, bytes: Bytes) -> LResult<()> {
+    pub(crate) fn push_bulk(&mut self, bytes: Bytes) -> Result<()> {
         match self {
             Frame::Array(vec) => {
                 vec.push(Frame::BulkString(bytes));
@@ -113,7 +113,7 @@ impl Frame {
         }
     }
 
-    pub(crate) fn push_int(&mut self, value: u64) -> LResult<()> {
+    pub(crate) fn push_int(&mut self, value: u64) -> Result<()> {
         match self {
             Frame::Array(vec) => {
                 vec.push(Frame::Integer(value));
@@ -127,21 +127,21 @@ impl Frame {
     }
 }
 
-fn get_u8(src: &mut Cursor<&[u8]>) -> LResult<u8> {
+fn get_u8(src: &mut Cursor<&[u8]>) -> Result<u8> {
     if !src.has_remaining() {
         return Err(Error::IncompleteFrame);
     }
     Ok(src.get_u8())
 }
 
-fn peek_u8(src: &mut Cursor<&[u8]>) -> LResult<u8> {
+fn peek_u8(src: &mut Cursor<&[u8]>) -> Result<u8> {
     if !src.has_remaining() {
         return Err(Error::IncompleteFrame);
     }
     Ok(src.chunk()[0])
 }
 
-fn skip(src: &mut Cursor<&[u8]>, n: usize) -> LResult<()> {
+fn skip(src: &mut Cursor<&[u8]>, n: usize) -> Result<()> {
     if src.remaining() < n {
         return Err(Error::IncompleteFrame);
     }
@@ -149,7 +149,7 @@ fn skip(src: &mut Cursor<&[u8]>, n: usize) -> LResult<()> {
     Ok(())
 }
 
-fn get_decimal(src: &mut Cursor<&[u8]>) -> LResult<u64> {
+fn get_decimal(src: &mut Cursor<&[u8]>) -> Result<u64> {
     use atoi::atoi;
 
     let line = get_line(src)?;
@@ -157,7 +157,7 @@ fn get_decimal(src: &mut Cursor<&[u8]>) -> LResult<u64> {
     atoi(line).ok_or(Error::Protocol("invalid frame format".into()))
 }
 
-fn get_line<'a>(src: &'a mut Cursor<&[u8]>) -> LResult<&'a [u8]> {
+fn get_line<'a>(src: &'a mut Cursor<&[u8]>) -> Result<&'a [u8]> {
     let start = src.position() as usize;
     let end = src.get_ref().len() - 1;
 
@@ -258,6 +258,22 @@ mod tests {
             Frame::Array(vec![
                 Frame::SimpleString("OK".to_string()),
                 Frame::BulkString(Bytes::from("foobar")),
+            ])
+        );
+    }
+
+    #[test]
+    fn test_recursive_array() {
+        let mut buf = Cursor::new(b"*2\r\n*2\r\n+OK\r\n$6\r\nfoobar\r\n$3\r\nbaz\r\n".as_slice());
+        let frame = Frame::parse(&mut buf).unwrap();
+        assert_eq!(
+            frame,
+            Frame::Array(vec![
+                Frame::Array(vec![
+                    Frame::SimpleString("OK".to_string()),
+                    Frame::BulkString(Bytes::from("foobar")),
+                ]),
+                Frame::BulkString(Bytes::from("baz")),
             ])
         );
     }

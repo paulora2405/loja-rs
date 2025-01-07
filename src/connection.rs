@@ -1,6 +1,6 @@
 //! A module for handling the connection to a stream, usually a remote peer via a [`TcpStream`].
 use crate::frame::Frame;
-use crate::{Error, LResult};
+use crate::{Error, Result};
 use bytes::{Buf, BytesMut};
 use std::io::Cursor;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, BufWriter};
@@ -50,11 +50,11 @@ impl<S: ConnectionStream> Connection<S> {
     ///
     /// # Returns
     ///
-    /// On success, the received frame is returned. If the `TcpStream`
+    /// On success, the received frame is returned. If the stream
     /// is closed in a way that doesn't break a frame in half, it returns
     /// `None`. Otherwise, an error is returned.
     #[tracing::instrument(skip_all)]
-    pub async fn read_frame(&mut self) -> LResult<Option<Frame>> {
+    pub async fn read_frame(&mut self) -> Result<Option<Frame>> {
         loop {
             // Attempt to parse a frame from the buffered data. If enough data
             // has been buffered, the frame is returned.
@@ -93,7 +93,7 @@ impl<S: ConnectionStream> Connection<S> {
     /// `Ok(None)` is returned.
     ///
     /// Any other errors are returned as is.
-    fn parse_frame(&mut self) -> LResult<Option<Frame>> {
+    fn parse_frame(&mut self) -> Result<Option<Frame>> {
         let mut buf = Cursor::new(&self.buffer[..]);
 
         match Frame::check(&mut buf) {
@@ -123,7 +123,7 @@ impl<S: ConnectionStream> Connection<S> {
     /// syscalls. However, it is fine to call these functions on a *buffered*
     /// write stream. The data will be written to the buffer. Once the buffer is
     /// full, it is flushed to the underlying socket.
-    pub async fn write_frame(&mut self, frame: &Frame) -> LResult<()> {
+    pub async fn write_frame(&mut self, frame: &Frame) -> Result<()> {
         // Arrays are encoded by encoding each entry. All other frame types are
         // considered literals. For now, we do not encode
         // recursive frame structures. See below for more details.

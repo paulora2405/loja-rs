@@ -1,9 +1,9 @@
 use bytes::Bytes;
-use loja::{Client, LResult};
+use loja::{Client, Result};
 use tokio::sync::{mpsc, oneshot};
 use tracing::info;
 
-type Responder<T> = oneshot::Sender<LResult<T>>;
+type Responder<T> = oneshot::Sender<Result<T>>;
 #[derive(Debug)]
 enum Command {
     Get {

@@ -32,4 +32,4 @@ pub const DEFAULT_PORT: u16 = 6379;
 pub const DEFAULT_HOST: &str = "0.0.0.0";
 
 /// A type alias for the result of a function that may return a [`Error`].
-pub type LResult<T> = std::result::Result<T, crate::error::Error>;
+pub type Result<T> = std::result::Result<T, crate::error::Error>;

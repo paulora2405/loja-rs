@@ -1,6 +1,6 @@
 //! Implementation of the `GET` command.
 use super::Command;
-use crate::{parse::Parse, ConnectionStream, Frame, LResult};
+use crate::{parse::Parse, ConnectionStream, Frame, Result};
 use bytes::Bytes;
 use tracing::debug;
 
@@ -27,7 +27,7 @@ impl GetCmd {
 }
 
 impl Command for GetCmd {
-    fn parse_frames(parse: &mut Parse) -> LResult<Self>
+    fn parse_frames(parse: &mut Parse) -> Result<Self>
     where
         Self: Sized,
     {
@@ -40,7 +40,7 @@ impl Command for GetCmd {
         self,
         db: &crate::Db,
         dst: &mut crate::Connection<S>,
-    ) -> LResult<()> {
+    ) -> Result<()> {
         let response = if let Some(value) = db.get(&self.key) {
             Frame::BulkString(value.clone())
         } else {
@@ -54,7 +54,7 @@ impl Command for GetCmd {
         Ok(())
     }
 
-    fn into_frame(self) -> LResult<crate::Frame> {
+    fn into_frame(self) -> Result<crate::Frame> {
         let mut frame = Frame::array();
         frame.push_bulk(Bytes::from("get"))?;
         frame.push_bulk(Bytes::from(self.key))?;

@@ -1,6 +1,6 @@
 //! Implement the `SET` command.
 use super::Command;
-use crate::{ConnectionStream, Error, Frame, LResult};
+use crate::{ConnectionStream, Error, Frame, Result};
 use bytes::Bytes;
 use std::time::Duration;
 use tracing::debug;
@@ -77,7 +77,7 @@ impl Command for SetCmd {
     /// ```text
     /// SET key value [EX seconds|PX milliseconds]
     /// ```
-    fn parse_frames(parse: &mut crate::parse::Parse) -> LResult<Self>
+    fn parse_frames(parse: &mut crate::parse::Parse) -> Result<Self>
     where
         Self: Sized,
     {
@@ -130,7 +130,7 @@ impl Command for SetCmd {
         self,
         db: &crate::Db,
         dst: &mut crate::Connection<S>,
-    ) -> LResult<()> {
+    ) -> Result<()> {
         {
             db.set(self.key, self.value, self.expire);
         }
@@ -144,7 +144,7 @@ impl Command for SetCmd {
     ///
     /// This is called by the client when encoding a `Set` command to send to
     /// the server.
-    fn into_frame(self) -> LResult<crate::Frame> {
+    fn into_frame(self) -> Result<crate::Frame> {
         let mut frame = Frame::array();
         frame.push_bulk(Bytes::from("set"))?;
         frame.push_bulk(Bytes::from(self.key))?;

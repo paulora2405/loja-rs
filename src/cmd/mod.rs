@@ -1,5 +1,5 @@
 //! Commands module.
-use crate::{parse::Parse, Connection, ConnectionStream, Db, Error, Frame, LResult, Shutdown};
+use crate::{parse::Parse, Connection, ConnectionStream, Db, Error, Frame, Result, Shutdown};
 use std::fmt::Display;
 
 pub mod get;
@@ -12,7 +12,7 @@ pub mod set;
 pub use set::SetCmd;
 
 pub(crate) trait Command {
-    fn parse_frames(parse: &mut Parse) -> LResult<Self>
+    fn parse_frames(parse: &mut Parse) -> Result<Self>
     where
         Self: Sized;
 
@@ -20,9 +20,9 @@ pub(crate) trait Command {
         self,
         db: &Db,
         dst: &mut Connection<S>,
-    ) -> impl std::future::Future<Output = LResult<()>> + Send;
+    ) -> impl std::future::Future<Output = Result<()>> + Send;
 
-    fn into_frame(self) -> LResult<Frame>;
+    fn into_frame(self) -> Result<Frame>;
 }
 
 /// All possible command variants.
@@ -39,7 +39,7 @@ pub enum CommandVariant {
 impl CommandVariant {
     /// Parse a frame into a command variant.
     #[tracing::instrument(ret, skip_all, level = "debug")]
-    pub fn from_frame(frame: Frame) -> LResult<Self> {
+    pub fn from_frame(frame: Frame) -> Result<Self> {
         let mut parse = Parse::new(frame)?;
 
         let command_name = parse.next_string()?.to_uppercase();
@@ -61,7 +61,7 @@ impl CommandVariant {
         db: &Db,
         dst: &mut Connection<S>,
         _shutdown: &mut Shutdown,
-    ) -> LResult<()> {
+    ) -> Result<()> {
         use CommandVariant as C;
 
         match self {

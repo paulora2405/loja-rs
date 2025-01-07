@@ -22,7 +22,7 @@ impl PingCmd {
 }
 
 impl Command for PingCmd {
-    fn parse_frames(parse: &mut super::Parse) -> crate::LResult<Self>
+    fn parse_frames(parse: &mut super::Parse) -> crate::Result<Self>
     where
         Self: Sized,
     {
@@ -38,7 +38,7 @@ impl Command for PingCmd {
         self,
         _db: &crate::Db,
         dst: &mut crate::Connection<S>,
-    ) -> crate::LResult<()> {
+    ) -> crate::Result<()> {
         let response = match self.msg {
             None => Frame::SimpleString("PONG".to_string()),
             Some(msg) => Frame::BulkString(msg),
@@ -51,7 +51,7 @@ impl Command for PingCmd {
         Ok(())
     }
 
-    fn into_frame(self) -> crate::LResult<Frame> {
+    fn into_frame(self) -> crate::Result<Frame> {
         let mut frame = Frame::array();
         frame.push_bulk(Bytes::from("ping"))?;
         if let Some(msg) = self.msg {
