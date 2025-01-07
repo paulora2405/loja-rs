@@ -117,5 +117,7 @@ allow_warnings = true
 # should go in your personal global prefs.toml file instead.
 [keybindings]
 # alt-m = "job:my-job"
-c = "job:clippy-all" # comment this to have 'c' run clippy on only the default target
+c = "job:clippy-all"    # comment this to have 'c' run clippy on only the default target
 r = "job:run-long"
+d = "job:doc"
+ctrl-d = "job:doc-open"
