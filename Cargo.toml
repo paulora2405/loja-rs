@@ -2,6 +2,19 @@
 name = "loja"
 version = "0.1.0"
 edition = "2021"
+description = "A simple Redis Server and Client implemented in Rust"
+repository = "https://github.com/paulora2405/loja-rs"
+authors = ["Paulo Albuquerque <paulora2405@gmail.com>"]
+license = "MIT"
+readme = "README.md"
+keywords = ["redis", "server", "client", "resp", "key-value"]
+categories = [
+    "asynchronous",
+    "caching",
+    "database-implementations",
+    "network-programming",
+    "command-line-utilities",
+]
 
 [dependencies]
 anyhow = "1.0.95"
