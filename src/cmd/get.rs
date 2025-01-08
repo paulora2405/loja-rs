@@ -44,7 +44,7 @@ impl Command for GetCmd {
         let response = if let Some(value) = db.get(&self.key) {
             Frame::BulkString(value.clone())
         } else {
-            Frame::Null
+            Frame::NullBulkString
         };
 
         debug!(?response);

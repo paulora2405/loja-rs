@@ -7,12 +7,15 @@ use std::io::Cursor;
 /// See: <https://redis.io/docs/latest/develop/reference/protocol-spec/>
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Frame {
+    // RESP 2
     SimpleString(String),
     SimpleError(String),
-    /// TODO: Use `i64` instead of `u64` to represent signed integers. And update the codec accordingly.
-    Integer(u64),
+    Integer(i64),
     BulkString(Bytes),
     Array(Vec<Frame>),
+    NullBulkString,
+    NullArray,
+    // RESP 3
     Null,
 }
 
@@ -24,7 +27,7 @@ impl Frame {
                 Ok(())
             }
             b':' => {
-                let _ = get_decimal(src)?;
+                let _ = get_decimal_signed(src)?;
                 Ok(())
             }
             b'$' => {
@@ -33,17 +36,27 @@ impl Frame {
                     skip(src, 4)
                 } else {
                     // read the bulk string
-                    let len: usize = get_decimal(src)?.try_into()?;
+                    let len: usize = get_decimal_signed(src)?.try_into()?;
                     // skip that number of bytes + 2 for '\r\n'
                     skip(src, len + 2)
                 }
             }
             b'*' => {
-                let len = get_decimal(src)?;
+                let len = get_decimal_signed(src)?;
                 for _ in 0..len {
                     Frame::check(src)?;
                 }
                 Ok(())
+            }
+            b'_' => {
+                let line = get_line(src)?;
+                if line != b"" {
+                    Err(Error::Protocol(format!(
+                        "invalid `null` data type frame format, frame contained bytes `{line:?}`"
+                    )))
+                } else {
+                    Ok(())
+                }
             }
             actual => Err(Error::Protocol(format!("invalid frame byte `{actual}`"))),
         }
@@ -62,16 +75,20 @@ impl Frame {
                 let string = String::from_utf8(line)?;
                 Ok(Frame::SimpleError(string))
             }
-            b':' => Ok(Frame::Integer(get_decimal(src)?)),
+            b':' => Ok(Frame::Integer(get_decimal_signed(src)?)),
             b'$' => {
                 if b'-' == peek_u8(src)? {
                     let line = get_line(src)?;
                     if line != b"-1" {
-                        return Err(Error::Protocol("invalid frame format".into()));
+                        return Err(Error::Protocol(format!(
+                            "invalid frame format, only valid negative length is -1, got `{line:?}`"
+                        )));
                     }
-                    Ok(Frame::Null)
+                    Ok(Frame::NullBulkString)
                 } else {
-                    let len = get_decimal(src)?.try_into()?;
+                    // Technically, the spec does not say that a '+' is allowed
+                    // but we do in order to accomodate to weird clients
+                    let len = get_decimal_unsigned(src)?.try_into()?;
                     let n = len + 2;
                     if src.remaining() < n {
                         return Err(Error::IncompleteFrame);
@@ -83,16 +100,30 @@ impl Frame {
                 }
             }
             b'*' => {
-                let len: usize = get_decimal(src)?.try_into()?;
+                let decimal = get_decimal_signed(src)?;
+                if decimal == -1 {
+                    return Ok(Frame::NullArray);
+                }
+                let len: usize = decimal.try_into()?;
                 let mut out = Vec::with_capacity(len);
                 for _ in 0..len {
                     out.push(Frame::parse(src)?);
                 }
                 Ok(Frame::Array(out))
             }
-            _ => Err(Error::Protocol(
-                "first byte was not a valid RESP data type".to_string(),
-            )),
+            b'_' => {
+                let line = get_line(src)?;
+                if line != b"" {
+                    Err(Error::Protocol(format!(
+                        "invalid `null` data type frame format, frame contained bytes `{line:?}`"
+                    )))
+                } else {
+                    Ok(Frame::Null)
+                }
+            }
+            first_byte => Err(Error::Protocol(format!(
+                "first byte was not a valid RESP data type `{first_byte}`"
+            ))),
         }
     }
 
@@ -113,7 +144,7 @@ impl Frame {
         }
     }
 
-    pub(crate) fn push_int(&mut self, value: u64) -> Result<()> {
+    pub(crate) fn push_int(&mut self, value: i64) -> Result<()> {
         match self {
             Frame::Array(vec) => {
                 vec.push(Frame::Integer(value));
@@ -149,7 +180,15 @@ fn skip(src: &mut Cursor<&[u8]>, n: usize) -> Result<()> {
     Ok(())
 }
 
-fn get_decimal(src: &mut Cursor<&[u8]>) -> Result<u64> {
+fn get_decimal_signed(src: &mut Cursor<&[u8]>) -> Result<i64> {
+    use atoi::atoi;
+
+    let line = get_line(src)?;
+
+    atoi(line).ok_or(Error::Protocol("invalid frame format".into()))
+}
+
+fn get_decimal_unsigned(src: &mut Cursor<&[u8]>) -> Result<u64> {
     use atoi::atoi;
 
     let line = get_line(src)?;
@@ -170,44 +209,62 @@ fn get_line<'a>(src: &'a mut Cursor<&[u8]>) -> Result<&'a [u8]> {
     Err(Error::IncompleteFrame)
 }
 
-impl std::fmt::Display for Frame {
-    fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
-        use std::str;
-
-        match self {
-            Frame::SimpleString(response) => response.fmt(fmt),
-            Frame::SimpleError(msg) => write!(fmt, "error: {}", msg),
-            Frame::Integer(num) => num.fmt(fmt),
-            Frame::BulkString(msg) => match str::from_utf8(msg) {
-                Ok(string) => string.fmt(fmt),
-                Err(_) => write!(fmt, "{:?}", msg),
-            },
-            Frame::Null => "(nil)".fmt(fmt),
-            Frame::Array(parts) => {
-                for (i, part) in parts.iter().enumerate() {
-                    if i > 0 {
-                        // use space as the array element display separator
-                        write!(fmt, " ")?;
-                    }
-
-                    part.fmt(fmt)?;
-                }
-
-                Ok(())
-            }
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_all_data_types() {
+        let frames: &[&[u8]] = &[
+            b"+OK\r\n",
+            b"-ERR unknown command 'foobar'\r\n",
+            b":1000\r\n",
+            b"$6\r\nfoobar\r\n",
+            b"$0\r\n\r\n",
+            b"$-1\r\n",
+            b"*2\r\n+OK\r\n$6\r\nfoobar\r\n",
+            b"*1\r\n+OK\r\n",
+            b"*-1\r\n",
+            b"*0\r\n",
+            b"_\r\n",
+        ];
+        for frame in frames {
+            match_frame(frame);
+        }
+    }
+
+    /// This function is used to ensure that parse contains every variant of [`Frame`].
+    fn match_frame(src: &[u8]) {
+        let mut buf = Cursor::new(src);
+        let frame = Frame::parse(&mut buf).unwrap();
+        // A match statement without a catch-all arm will fail to compile if a variant is missing.
+        match frame {
+            Frame::SimpleString(_) => (),
+            Frame::SimpleError(_) => (),
+            Frame::Integer(_) => (),
+            Frame::BulkString(_) => (),
+            Frame::Array(_) => (),
+            Frame::NullBulkString => (),
+            Frame::NullArray => (),
+            Frame::Null => (),
+        }
+    }
 
     #[test]
     fn test_simple_string() {
         let mut buf = Cursor::new(b"+OK\r\n".as_slice());
         let frame = Frame::parse(&mut buf).unwrap();
         assert_eq!(frame, Frame::SimpleString("OK".to_string()));
+    }
+
+    #[test]
+    fn test_long_simple_string() {
+        let mut buf = Cursor::new(b"+this is a long string\r\n".as_slice());
+        let frame = Frame::parse(&mut buf).unwrap();
+        assert_eq!(
+            frame,
+            Frame::SimpleString("this is a long string".to_string())
+        );
     }
 
     #[test]
@@ -233,6 +290,30 @@ mod tests {
         let mut buf = Cursor::new(b":00000000\r\n".as_slice());
         let frame = Frame::parse(&mut buf).unwrap();
         assert_eq!(frame, Frame::Integer(0));
+
+        let mut buf = Cursor::new(b":-0\r\n".as_slice());
+        let frame = Frame::parse(&mut buf).unwrap();
+        assert_eq!(frame, Frame::Integer(0));
+
+        let mut buf = Cursor::new(b":+0\r\n".as_slice());
+        let frame = Frame::parse(&mut buf).unwrap();
+        assert_eq!(frame, Frame::Integer(0));
+
+        let mut buf = Cursor::new(b":-1\r\n".as_slice());
+        let frame = Frame::parse(&mut buf).unwrap();
+        assert_eq!(frame, Frame::Integer(-1));
+
+        let mut buf = Cursor::new(b":+1\r\n".as_slice());
+        let frame = Frame::parse(&mut buf).unwrap();
+        assert_eq!(frame, Frame::Integer(1));
+
+        let mut buf = Cursor::new(b":+9223372036854775807\r\n".as_slice());
+        let frame = Frame::parse(&mut buf).unwrap();
+        assert_eq!(frame, Frame::Integer(i64::MAX));
+
+        let mut buf = Cursor::new(b":-9223372036854775808\r\n".as_slice());
+        let frame = Frame::parse(&mut buf).unwrap();
+        assert_eq!(frame, Frame::Integer(i64::MIN));
     }
 
     #[test]
@@ -240,13 +321,21 @@ mod tests {
         let mut buf = Cursor::new(b"$6\r\nfoobar\r\n".as_slice());
         let frame = Frame::parse(&mut buf).unwrap();
         assert_eq!(frame, Frame::BulkString(Bytes::from("foobar")));
+
+        let mut buf = Cursor::new(b"$0\r\n\r\n".as_slice());
+        let frame = Frame::parse(&mut buf).unwrap();
+        assert_eq!(frame, Frame::BulkString(Bytes::from("")));
+
+        let mut buf = Cursor::new(b"$+2\r\nOK\r\n".as_slice());
+        let frame = Frame::parse(&mut buf).unwrap();
+        assert_eq!(frame, Frame::BulkString(Bytes::from("OK")));
     }
 
     #[test]
     fn test_null_bulk_string() {
         let mut buf = Cursor::new(b"$-1\r\n".as_slice());
         let frame = Frame::parse(&mut buf).unwrap();
-        assert_eq!(frame, Frame::Null);
+        assert_eq!(frame, Frame::NullBulkString);
     }
 
     #[test]
@@ -260,6 +349,31 @@ mod tests {
                 Frame::BulkString(Bytes::from("foobar")),
             ])
         );
+
+        let mut buf = Cursor::new(b"*1\r\n+OK\r\n".as_slice());
+        let frame = Frame::parse(&mut buf).unwrap();
+        assert_eq!(
+            frame,
+            Frame::Array(vec![Frame::SimpleString("OK".to_string())])
+        );
+
+        let mut buf = Cursor::new(b"*3\r\n+OK\r\n".as_slice());
+        let frame = Frame::parse(&mut buf);
+        assert!(frame.is_err());
+    }
+
+    #[test]
+    fn test_null_array() {
+        let mut buf = Cursor::new(b"*-1\r\n".as_slice());
+        let frame = Frame::parse(&mut buf).unwrap();
+        assert_eq!(frame, Frame::NullArray);
+    }
+
+    #[test]
+    fn test_empty_array() {
+        let mut buf = Cursor::new(b"*0\r\n".as_slice());
+        let frame = Frame::parse(&mut buf).unwrap();
+        assert_eq!(frame, Frame::array());
     }
 
     #[test]
@@ -276,6 +390,17 @@ mod tests {
                 Frame::BulkString(Bytes::from("baz")),
             ])
         );
+    }
+
+    #[test]
+    fn test_null() {
+        let mut buf = Cursor::new(b"_\r\n".as_slice());
+        let frame = Frame::parse(&mut buf).unwrap();
+        assert_eq!(frame, Frame::Null);
+
+        let mut buf = Cursor::new(b"_text\r\n".as_slice());
+        let frame = Frame::parse(&mut buf);
+        assert!(frame.is_err());
     }
 
     #[test]

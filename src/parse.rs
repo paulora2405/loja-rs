@@ -45,14 +45,14 @@ impl Parse {
         }
     }
 
-    pub(crate) fn next_int(&mut self) -> Result<u64> {
+    pub(crate) fn next_int_unsigned(&mut self) -> Result<u64> {
         use atoi::atoi;
-        let invalid_number_err: Error = Error::Protocol("invalid number".to_string());
+        let invalid_number_err = Error::Protocol("invalid number".to_string());
 
         match self.next()? {
-            Frame::Integer(v) => Ok(v),
-            Frame::SimpleString(data) => atoi::<u64>(data.as_bytes()).ok_or(invalid_number_err),
-            Frame::BulkString(data) => atoi::<u64>(&data).ok_or(invalid_number_err),
+            Frame::Integer(v) => Ok(v as u64),
+            Frame::SimpleString(data) => atoi::<_>(data.as_bytes()).ok_or(invalid_number_err),
+            Frame::BulkString(data) => atoi::<_>(&data).ok_or(invalid_number_err),
             frame => Err(Error::Protocol(format!(
                 "expected int frame, got {frame:?}"
             ))),

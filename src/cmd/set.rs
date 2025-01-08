@@ -92,13 +92,13 @@ impl Command for SetCmd {
             Ok(s) if s.to_uppercase() == "EX" => {
                 // The expiration is specified in seconds.
                 // The next value must be an integer.
-                let secs = parse.next_int()?;
+                let secs = parse.next_int_unsigned()?;
                 expire = Some(Duration::from_secs(secs));
             }
             Ok(s) if s.to_uppercase() == "PX" => {
                 // The expiration is specified in milliseconds.
                 // The next value must be an integer.
-                let ms = parse.next_int()?;
+                let ms = parse.next_int_unsigned()?;
                 expire = Some(Duration::from_millis(ms));
             }
             // Currently, we don't support any of the other SET
@@ -151,13 +151,19 @@ impl Command for SetCmd {
         frame.push_bulk(self.value)?;
         if let Some(ms) = self.expire {
             // Expirations in RESP can be specified in two ways
-            // 1. SET key value EX seconds
-            // 2. SET key value PX milliseconds
-            // We use the second option because it allows greater precision and
-            // the client parses the expiration argument as milliseconds
-            // in duration_from_ms_str()
-            frame.push_bulk(Bytes::from("px"))?;
-            frame.push_int(ms.as_millis() as u64)?;
+            // `SET key value EX` seconds
+            // `SET key value PX` milliseconds
+            // if we only got `ms.as_millis()`,
+            // technically it could overflow if the user inputed
+            // a value close to i64::MAX as seconds,
+            // and it got converted to miliseconds
+            if ms.subsec_millis() == 0 {
+                frame.push_bulk(Bytes::from("ex"))?;
+                frame.push_int(ms.as_secs() as i64)?;
+            } else {
+                frame.push_bulk(Bytes::from("px"))?;
+                frame.push_int(ms.as_millis() as i64)?;
+            }
         }
         Ok(frame)
     }

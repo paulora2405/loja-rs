@@ -152,26 +152,32 @@ impl<S: ConnectionStream> Connection<S> {
                 let len = val.len();
 
                 self.stream.write_u8(b'$').await?;
-                self.write_decimal(len as u64).await?;
+                self.write_decimal(len as i64).await?;
                 self.stream.write_all(val).await?;
                 self.stream.write_all(b"\r\n").await?;
             }
-            Frame::Null => {
+            Frame::NullBulkString => {
                 self.stream.write_all(b"$-1\r\n").await?;
+            }
+            Frame::NullArray => {
+                self.stream.write_all(b"*-1\r\n").await?;
             }
             Frame::Array(frames) => {
                 self.stream.write_u8(b'*').await?;
-                self.write_decimal(frames.len() as u64).await?;
+                self.write_decimal(frames.len() as i64).await?;
                 for frame in frames {
                     self.write_value(frame).await?;
                 }
+            }
+            Frame::Null => {
+                self.stream.write_all(b"_\r\n").await?;
             }
         };
 
         Ok(())
     }
 
-    async fn write_decimal(&mut self, val: u64) -> std::io::Result<()> {
+    async fn write_decimal(&mut self, val: i64) -> std::io::Result<()> {
         use std::io::Write;
 
         let mut buf = [0u8; 12];
@@ -206,7 +212,7 @@ mod tests {
             // integer
             (b":1234\r\n", Frame::Integer(1234)),
             // null bulk strig
-            (b"$-1\r\n", Frame::Null),
+            (b"$-1\r\n", Frame::NullBulkString),
             // bulk string
             (b"$4\r\nping\r\n", Frame::BulkString(Bytes::from("ping"))),
             (

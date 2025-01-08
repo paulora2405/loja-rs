@@ -58,7 +58,7 @@ impl Client<TcpStream> {
         match self.read_response().await? {
             Frame::SimpleString(val) => Ok(val.into()),
             Frame::BulkString(val) => Ok(val),
-            frame => Err(Error::Response(format!("unexpected frame: {frame}"))),
+            frame => Err(Error::Response(format!("unexpected frame: {frame:?}"))),
         }
     }
 
@@ -77,8 +77,8 @@ impl Client<TcpStream> {
         match self.read_response().await? {
             Frame::SimpleString(val) => Ok(Some(val.into())),
             Frame::BulkString(val) => Ok(Some(val)),
-            Frame::Null => Ok(None),
-            frame => Err(Error::Response(format!("unexpected frame: {frame}"))),
+            Frame::NullBulkString | Frame::NullArray => Ok(None),
+            frame => Err(Error::Response(format!("unexpected frame: {frame:?}"))),
         }
     }
 
@@ -116,7 +116,7 @@ impl Client<TcpStream> {
         // `SimpleString` with a value of `OK` is the only valid response.
         match self.read_response().await? {
             Frame::SimpleString(val) if val == "OK" => Ok(()),
-            frame => Err(Error::Response(format!("unexpected frame: {frame}"))),
+            frame => Err(Error::Response(format!("unexpected frame: {frame:?}"))),
         }
     }
 
