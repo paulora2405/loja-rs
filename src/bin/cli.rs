@@ -1,81 +1,118 @@
 use bytes::Bytes;
-use loja::{Client, Result};
-use tokio::sync::{mpsc, oneshot};
-use tracing::info;
+// TODO: remove this
+use clap::{Parser, Subcommand, ValueEnum};
+use loja::{Client, DEFAULT_HOST, DEFAULT_PORT};
+use std::time::Duration;
+use tokio::net::TcpStream;
 
-type Responder<T> = oneshot::Sender<Result<T>>;
-#[derive(Debug)]
-enum Command {
-    Get {
-        key: String,
-        res: Responder<Option<Bytes>>,
+#[tokio::main(flavor = "current_thread")]
+async fn main() -> anyhow::Result<()> {
+    tracing_subscriber::fmt::init();
+
+    let cli = LojaCli::parse();
+    let addr = std::net::SocketAddr::new(cli.host, cli.port);
+    let client = Client::connect(&addr).await?;
+
+    match cli.command {
+        Some(subcomman) => one_shot_command(client, subcomman).await?,
+        None => interactive_mode(client)?,
+    }
+
+    Ok(())
+}
+
+fn interactive_mode(mut _client: Client<TcpStream>) -> anyhow::Result<()> {
+    todo!()
+}
+
+async fn one_shot_command(
+    mut client: Client<TcpStream>,
+    subcommand: LojaSubcommand,
+) -> anyhow::Result<()> {
+    match subcommand {
+        LojaSubcommand::Ping { msg } => {
+            let response = client.ping(msg.map(|s| s.into())).await?;
+            println!("{}", String::from_utf8_lossy(response.as_ref()));
+        }
+        LojaSubcommand::Get { key } => {
+            let response = client.get(&key).await?;
+            if let Some(value) = response {
+                println!("{}", String::from_utf8_lossy(value.as_ref()));
+            } else {
+                println!("(nil)");
+            }
+        }
+        LojaSubcommand::Set {
+            key,
+            value,
+            expire_unit,
+            expires,
+        } => {
+            let duration = to_duration(expire_unit, expires);
+            if let Some(duration) = duration {
+                client
+                    .set_expires(&key, Bytes::from(value), duration)
+                    .await?;
+            } else {
+                client.set(&key, Bytes::from(value)).await?;
+            }
+            println!("OK");
+        }
+    };
+
+    Ok(())
+}
+
+#[derive(Debug, Parser)]
+#[command(name = "loja-cli", version, author)]
+/// A simple Redis cli client
+struct LojaCli {
+    #[clap(subcommand)]
+    command: Option<LojaSubcommand>,
+    #[arg(long, default_value = DEFAULT_HOST)]
+    host: std::net::IpAddr,
+    #[arg(long, default_value_t = DEFAULT_PORT)]
+    port: u16,
+}
+
+#[derive(Debug, Subcommand)]
+/// Subcommand to execute in one-shot command mode.
+enum LojaSubcommand {
+    /// Ping the server.
+    Ping {
+        /// Message to ping
+        msg: Option<String>,
     },
-    Set {
+    /// Get the value of key.
+    Get {
+        /// Name of key to get.
         key: String,
-        val: Bytes,
-        res: Responder<()>,
+    },
+    /// Set key to hold the string value.
+    Set {
+        /// Name of the key to set.
+        key: String,
+        /// Value to set.
+        value: String,
+        /// Expiration unit, can be either `ex` or `px`.
+        #[arg(value_enum, requires = "expires")]
+        expire_unit: Option<ExpirationUnit>,
+        /// Expire the value after the specified amount of time.
+        #[arg(requires = "expire_unit")]
+        expires: Option<u64>,
     },
 }
 
-#[tokio::main]
-async fn main() -> anyhow::Result<()> {
-    tracing_subscriber::fmt::init();
-    info!("Starting client");
+#[derive(Debug, Clone, ValueEnum)]
+enum ExpirationUnit {
+    EX,
+    PX,
+}
 
-    let (tx, mut rx) = mpsc::channel(32);
-    let tx2 = tx.clone();
-
-    let t1 = tokio::spawn(async move {
-        let (res_tx, res_rx) = oneshot::channel();
-
-        let cmd = Command::Get {
-            key: "foo".to_string(),
-            res: res_tx,
-        };
-
-        tx.send(cmd).await.unwrap();
-
-        let res = res_rx.await.unwrap();
-        info!("GET = {:?}", res);
-    });
-
-    let t2 = tokio::spawn(async move {
-        let (res_tx, res_rx) = oneshot::channel();
-
-        let cmd = Command::Set {
-            key: "foo".to_string(),
-            val: "bar".into(),
-            res: res_tx,
-        };
-
-        tx2.send(cmd).await.unwrap();
-
-        let res = res_rx.await.unwrap();
-        info!("SET = {:?}", res);
-    });
-
-    let manager = tokio::spawn(async move {
-        let mut client = Client::connect("127.0.0.1:6379").await.unwrap();
-
-        use Command as C;
-        while let Some(cmd) = rx.recv().await {
-            match cmd {
-                C::Get { key, res } => {
-                    info!("GET key = {}", key);
-                    let client_res = client.get(&key).await;
-                    let _ = res.send(client_res);
-                }
-                C::Set { key, val, res } => {
-                    let client_res = client.set(&key, val).await;
-                    let _ = res.send(client_res);
-                }
-            }
-        }
-    });
-
-    t1.await?;
-    t2.await?;
-    manager.await?;
-
-    Ok(())
+fn to_duration(unit: Option<ExpirationUnit>, expires: Option<u64>) -> Option<Duration> {
+    match (unit, expires) {
+        (Some(ExpirationUnit::EX), Some(expires)) => Some(Duration::from_secs(expires)),
+        (Some(ExpirationUnit::PX), Some(expires)) => Some(Duration::from_millis(expires)),
+        _ => None,
+    }
 }
