@@ -10,18 +10,17 @@ use tracing::debug;
 
 /// Established connection with a Redis server.
 ///
-/// Backed by a single `TcpStream`, `Client` provides basic network client
+/// Backed by a [`Connection`], [`Client`] provides basic network client
 /// functionality (no pooling, retrying, ...).
-/// Requests are issued using the various methods of `Client`.
+/// Requests are issued using the various methods of [`Client`].
 #[derive(Debug)]
 pub struct Client<S> {
-    /// The TCP connection decorated with the RESP encoder / decoder
-    /// implemented using a buffered `TcpStream`.
+    /// The connection decorated with the RESP encoder / decoder.
     ///
-    /// When `Listener` receives an inbound connection, the `TcpStream` is
-    /// passed to `Connection::new`, which initializes the associated buffers.
-    /// `Connection` allows the handler to operate at the "frame" level and keep
-    /// the byte level protocol parsing details encapsulated in `Connection`.
+    /// When [`Listener`] receives an inbound connection, a stream `S` is
+    /// passed to [`Connection::new`], which initializes the associated buffers.
+    /// [`Connection`] allows the handler to operate at the "frame" level and keep
+    /// the byte level protocol parsing details encapsulated in [`Connection`].
     connection: Connection<S>,
 }
 
@@ -29,17 +28,17 @@ impl Client<TcpStream> {
     /// Establish a connection with the Redis server located at `addr`.
     ///
     /// `addr` may be any type that can be asynchronously converted to a
-    /// `SocketAddr`. This includes `SocketAddr` and strings. The `ToSocketAddrs`
-    /// trait is the Tokio version and not the `std` version.
+    /// [`SocketAddr`]. This includes [`SocketAddr`] and strings. The [`ToSocketAddrs`]
+    /// trait is the Tokio version and not the [`std`] version.
     pub async fn connect(addr: impl ToSocketAddrs) -> Result<Self> {
         // The `addr` argument is passed directly to `TcpStream::connect`. This
         // performs any asynchronous DNS lookup and attempts to establish the TCP
         // connection. An error at either step returns an error, which is then
         // bubbled up to the caller of `Client` connect.
-        let socket = TcpStream::connect(addr).await?;
+        let stream = TcpStream::connect(addr).await?;
         // Initialize a new `Connection` with the `TcpStream`.
         // This allocates read/write buffers to perform RESP frame parsing.
-        let connection = Connection::<_>::new(socket);
+        let connection = Connection::<_>::new(stream);
         Ok(Client { connection })
     }
 

@@ -68,13 +68,12 @@ struct Handler<S> {
     /// The implementation of the command is in the `cmd` module. Each command
     /// will need to interact with `db` in order to complete the work.
     db: Db,
-    /// The TCP connection decorated with the RESP encoder / decoder
-    /// implemented using a buffered `TcpStream`.
+    /// The TCP connection decorated with the RESP encoder / decoder.
     ///
-    /// When `Listener` receives an inbound connection, the `TcpStream` is
-    /// passed to `Connection::new`, which initializes the associated buffers.
-    /// `Connection` allows the handler to operate at the "frame" level and keep
-    /// the byte level protocol parsing details encapsulated in `Connection`.
+    /// When [`Listener`] receives an inbound connection, a stream `S` is
+    /// passed to [`Connection::new`], which initializes the associated buffers.
+    /// [`Connection`] allows the handler to operate at the "frame" level and keep
+    /// the byte level protocol parsing details encapsulated in [`Connection`].
     connection: Connection<S>,
     /// Listen for shutdown notifications.
     ///
@@ -85,7 +84,11 @@ struct Handler<S> {
     /// processed for the peer is continued until it reaches a safe state, at
     /// which point the connection is terminated.
     shutdown: Shutdown,
-    /// Not used directly. Instead, when `Handler` is dropped.
+    /// Signal used to determine if a handler is operating.
+    ///
+    /// Not used directly. Instead, when all [`Handler`]s are dropped,
+    /// a `None` message is sent to the receiver side,
+    /// which indicates that the server is allowed to initiate shutdown.
     _shutdown_complete: mpsc::Sender<()>,
 }
 

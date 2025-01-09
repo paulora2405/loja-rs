@@ -18,7 +18,7 @@ const DEFAULT_BUFFER_SIZE: usize = 16 * 1024;
 /// The contents of the write buffer are then written to the socket.
 #[derive(Debug)]
 pub(crate) struct Connection<S> {
-    /// Stream wrapped with a `BufWriter` for buffering writes.
+    /// Stream wrapped with a [`BufWriter`] for buffering writes.
     stream: BufWriter<S>,
     /// Buffer used for reading frames.
     // TODO: Look into `tokio_util::codec` and implementing my own codec for decoding and enco
@@ -32,12 +32,12 @@ pub(crate) trait ConnectionStream: AsyncRead + AsyncWrite + Unpin + Send {}
 impl<T: AsyncRead + AsyncWrite + Unpin + Send> ConnectionStream for T {}
 
 impl<S: ConnectionStream> Connection<S> {
-    /// Create a new `Connection` from a `TcpStream` socket.
+    /// Create a new `Connection` from a generic `stream` of type `S`.
     ///
     /// The connection is internally buffered, with a default buffer size of 16KB.
-    pub fn new(socket: S) -> Self {
+    pub fn new(stream: S) -> Self {
         Self {
-            stream: BufWriter::new(socket),
+            stream: BufWriter::new(stream),
             buffer: BytesMut::with_capacity(DEFAULT_BUFFER_SIZE),
         }
     }
