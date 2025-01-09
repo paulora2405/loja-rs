@@ -1,9 +1,13 @@
+use anyhow::bail;
 use bytes::Bytes;
-// TODO: remove this
 use clap::{Parser, Subcommand, ValueEnum};
 use loja::{Client, DEFAULT_HOST, DEFAULT_PORT};
-use std::time::Duration;
+use std::{
+    io::{BufRead, IsTerminal, Write},
+    time::Duration,
+};
 use tokio::net::TcpStream;
+use tracing::{debug, error};
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> anyhow::Result<()> {
@@ -11,22 +15,53 @@ async fn main() -> anyhow::Result<()> {
 
     let cli = LojaCli::parse();
     let addr = std::net::SocketAddr::new(cli.host, cli.port);
-    let client = Client::connect(&addr).await?;
+    let mut client = Client::connect(&addr).await?;
 
-    match cli.command {
-        Some(subcomman) => one_shot_command(client, subcomman).await?,
-        None => interactive_mode(client)?,
+    match cli.subcommand {
+        Some(subcommand) => cli_mode(&mut client, subcommand).await?,
+        None => interactive_mode(client).await?,
     }
 
     Ok(())
 }
 
-fn interactive_mode(mut _client: Client<TcpStream>) -> anyhow::Result<()> {
-    todo!()
+async fn interactive_mode(mut client: Client<TcpStream>) -> anyhow::Result<()> {
+    let is_terminal = std::io::stdout().is_terminal();
+    print_prompt(is_terminal);
+    let stdin = std::io::stdin();
+
+    for line in stdin.lock().lines() {
+        let line = line?;
+
+        let mut args = vec![""];
+        args.extend(line.split_whitespace());
+        let cli = LojaCli::try_parse_from(args);
+        if let Ok(cli) = cli {
+            debug!(?cli);
+            if let Some(subcommand) = cli.subcommand {
+                cli_mode(&mut client, subcommand).await?;
+            }
+        } else {
+            let error = cli.unwrap_err().render();
+            let styled_str = error.to_string();
+            let render = styled_str.lines().next().unwrap();
+            eprintln!("{render}");
+        }
+        print_prompt(is_terminal);
+    }
+
+    Ok(())
 }
 
-async fn one_shot_command(
-    mut client: Client<TcpStream>,
+fn print_prompt(is_terminal: bool) {
+    if is_terminal {
+        print!("loja> ");
+        std::io::stdout().flush().unwrap();
+    }
+}
+
+async fn cli_mode(
+    client: &mut Client<TcpStream>,
     subcommand: LojaSubcommand,
 ) -> anyhow::Result<()> {
     match subcommand {
@@ -64,14 +99,20 @@ async fn one_shot_command(
 }
 
 #[derive(Debug, Parser)]
-#[command(name = "loja-cli", version, author)]
+#[command(name = "loja-cli", version, author, disable_help_flag(true))]
 /// A simple Redis cli client
+///
+/// When providing subcommands, the client will execute the command and exit.
+/// If no subcommands are provided, the client will start in interactive mode.
 struct LojaCli {
+    #[clap(long, action = clap::ArgAction::HelpLong)]
+    /// Display cli help.
+    help: Option<bool>,
     #[clap(subcommand)]
-    command: Option<LojaSubcommand>,
-    #[arg(long, default_value = DEFAULT_HOST)]
+    subcommand: Option<LojaSubcommand>,
+    #[arg(short, long, default_value = DEFAULT_HOST)]
     host: std::net::IpAddr,
-    #[arg(long, default_value_t = DEFAULT_PORT)]
+    #[arg(short, long, default_value_t = DEFAULT_PORT)]
     port: u16,
 }
 
