@@ -1,4 +1,3 @@
-use anyhow::bail;
 use bytes::Bytes;
 use clap::{Parser, Subcommand, ValueEnum};
 use loja::{Client, DEFAULT_HOST, DEFAULT_PORT};
@@ -7,7 +6,7 @@ use std::{
     time::Duration,
 };
 use tokio::net::TcpStream;
-use tracing::{debug, error};
+use tracing::debug;
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> anyhow::Result<()> {
@@ -26,9 +25,9 @@ async fn main() -> anyhow::Result<()> {
 }
 
 async fn interactive_mode(mut client: Client<TcpStream>) -> anyhow::Result<()> {
-    let is_terminal = std::io::stdout().is_terminal();
-    print_prompt(is_terminal);
     let stdin = std::io::stdin();
+    let is_terminal = stdin.is_terminal();
+    print_prompt(is_terminal);
 
     for line in stdin.lock().lines() {
         let line = line?;
