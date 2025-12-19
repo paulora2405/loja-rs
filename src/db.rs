@@ -5,7 +5,10 @@ use std::{
 };
 
 use bytes::Bytes;
-use tokio::{sync::Notify, time::Instant};
+use tokio::{
+    sync::{broadcast, Notify},
+    time::Instant,
+};
 use tracing::debug;
 
 #[derive(Debug)]
@@ -22,6 +25,11 @@ struct Entry {
 struct DbState {
     /// The actual Key/Value data.
     entries: HashMap<String, Entry>,
+    /// The pub/sub key-space.
+    ///
+    /// Redis uses a **separate** key space for key-value and pub/sub.
+    /// We handle that by using a separate [`HashMap`].
+    pub_sub: HashMap<String, broadcast::Sender<Bytes>>,
     /// Keys TTLs tracking.
     ///
     /// A `BTreeSet` is used to maintain expirations sorted by when they will expire.
@@ -112,6 +120,7 @@ impl Db {
         let shared = Arc::new(DbSharedState {
             state: RwLock::new(DbState {
                 entries: HashMap::new(),
+                pub_sub: HashMap::new(),
                 expirations: BTreeSet::new(),
                 shutdown: false,
             }),
@@ -200,9 +209,29 @@ impl Db {
         }
     }
 
+    /// Publishes a message to a given channel.
+    ///
+    /// # Returns
+    /// The number of subscribers listening on the channel at this exact times.
+    /// This should only be used as a hint, because a subscriber could drop
+    /// the channel before the message is actually delivered.
+    pub(crate) fn publish(&self, channel: &str, message: Bytes) -> usize {
+        let state = self.shared.state.read().unwrap();
+        state
+            .pub_sub
+            .get(channel)
+            // On a successful message send on the broadcast channel,
+            // the number of subscribers is returned. An error indicates there are
+            // no receivers, in which case, `0` should be returned.
+            .map(|tx| tx.send(message).unwrap_or(0))
+            // If there is no entry for the channel key, there are no subscribers.
+            // So return `0`.
+            .unwrap_or(0)
+    }
+
     /// Signals the purge background task to shutdown.
     ///
-    /// This is called by the `DbDropGuard`'s `Drop` implementation.
+    /// This is called by the [`DbDropGuard`]'s [`Drop`] implementation.
     fn shutdown_purge_task(&self) {
         // The background task must be signaled to shutdown. This is done by
         // setting `DbState::shutdown` to `true` and signalling the task.

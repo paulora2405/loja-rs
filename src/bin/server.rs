@@ -3,10 +3,12 @@ use clap::{command, Parser};
 use loja::{server, DEFAULT_HOST, DEFAULT_PORT};
 use tokio::net::TcpListener;
 use tracing::info;
+use tracing_subscriber::EnvFilter;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    tracing_subscriber::fmt::init();
+    setup_logging();
+
     let cli = LojaServerCli::parse();
     let addr = std::net::SocketAddr::new(cli.host, cli.port);
 
@@ -33,4 +35,12 @@ struct LojaServerCli {
     #[arg(short, long, default_value_t = DEFAULT_PORT)]
     /// Port to bind to.
     port: u16,
+}
+
+fn setup_logging() {
+    tracing_subscriber::fmt::fmt()
+        .with_thread_ids(true)
+        .compact()
+        .with_env_filter(EnvFilter::from_default_env())
+        .init();
 }

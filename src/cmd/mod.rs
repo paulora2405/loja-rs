@@ -11,6 +11,15 @@ pub use ping::PingCmd;
 pub mod set;
 pub use set::SetCmd;
 
+pub mod publish;
+pub use publish::PublishCmd;
+
+pub mod subscribe;
+pub use subscribe::SubscribeCmd;
+
+/// `Command` trait that has methods to create a `Command` from received frames,
+/// creating frames from a `Command`, and applying a `Command` to
+/// a [`Connection`] and [`Db`].
 pub(crate) trait Command {
     fn parse_frames(parse: &mut Parse) -> Result<Self>
     where
@@ -26,7 +35,7 @@ pub(crate) trait Command {
 }
 
 /// All possible command variants.
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum CommandVariant {
     /// `GET` command.
     Get(GetCmd),
@@ -34,6 +43,10 @@ pub enum CommandVariant {
     Set(SetCmd),
     /// `PING` command.
     Ping(PingCmd),
+    /// `PUBLISH` command.
+    Publish(PublishCmd),
+    /// `SUBSCRIBE` command.
+    Subscribe(SubscribeCmd),
 }
 
 impl CommandVariant {
@@ -48,6 +61,7 @@ impl CommandVariant {
             "GET" => CommandVariant::Get(GetCmd::parse_frames(&mut parse)?),
             "SET" => CommandVariant::Set(SetCmd::parse_frames(&mut parse)?),
             "PING" => CommandVariant::Ping(PingCmd::parse_frames(&mut parse)?),
+            "PUB" => CommandVariant::Publish(PublishCmd::parse_frames(&mut parse)?),
             _ => return Err(Error::UnknownCommand(command_name)),
         };
 
@@ -68,6 +82,7 @@ impl CommandVariant {
             C::Get(cmd) => cmd.apply(db, dst).await,
             C::Set(cmd) => cmd.apply(db, dst).await,
             C::Ping(cmd) => cmd.apply(db, dst).await,
+            C::Publish(cmd) => cmd.apply(db, dst).await,
         }
     }
 }
@@ -98,6 +113,7 @@ impl Display for CommandVariant {
                     write!(f, "PING")
                 }
             }
+            C::Publish(cmd) => write!(f, "PUB {} {:?}", cmd.channel(), cmd.message()),
         }
     }
 }
@@ -129,5 +145,71 @@ mod tests {
 
         let cmd = CommandVariant::Ping(PingCmd::new(Some(Bytes::from("hello"))));
         assert_eq!(cmd.to_string(), "PING b\"hello\"");
+
+        let cmd = CommandVariant::Publish(PublishCmd::new("foo".to_string(), Bytes::from("bar")));
+        assert_eq!(cmd.to_string(), "PUB foo b\"bar\"");
+    }
+
+    #[test]
+    fn test_cmd_variant_from_frames() {
+        let frame = Frame::Array(vec![
+            Frame::SimpleString("GET".to_string()),
+            Frame::SimpleString("foo".to_string()),
+        ]);
+        let cmd = CommandVariant::from_frame(frame).unwrap();
+        assert_eq!(cmd, CommandVariant::Get(GetCmd::new("foo")));
+
+        let frame = Frame::Array(vec![
+            Frame::SimpleString("SET".to_string()),
+            Frame::SimpleString("foo".to_string()),
+            Frame::BulkString(Bytes::from("bar")),
+        ]);
+        let cmd = CommandVariant::from_frame(frame).unwrap();
+        assert_eq!(
+            cmd,
+            CommandVariant::Set(SetCmd::new("foo", Bytes::from("bar"), None))
+        );
+
+        let frame = Frame::Array(vec![
+            Frame::SimpleString("SET".to_string()),
+            Frame::SimpleString("foo".to_string()),
+            Frame::BulkString(Bytes::from("bar")),
+            Frame::SimpleString("PX".to_string()),
+            Frame::Integer(10000),
+        ]);
+        let cmd = CommandVariant::from_frame(frame).unwrap();
+        assert_eq!(
+            cmd,
+            CommandVariant::Set(SetCmd::new(
+                "foo",
+                Bytes::from("bar"),
+                Some(Duration::from_secs(10))
+            ))
+        );
+
+        let frame = Frame::Array(vec![Frame::SimpleString("PING".to_string())]);
+        let cmd = CommandVariant::from_frame(frame).unwrap();
+        assert_eq!(cmd, CommandVariant::Ping(PingCmd::new(None)));
+
+        let frame = Frame::Array(vec![
+            Frame::SimpleString("PING".to_string()),
+            Frame::BulkString(Bytes::from("hello")),
+        ]);
+        let cmd = CommandVariant::from_frame(frame).unwrap();
+        assert_eq!(
+            cmd,
+            CommandVariant::Ping(PingCmd::new(Some(Bytes::from("hello"))))
+        );
+
+        let frame = Frame::Array(vec![
+            Frame::SimpleString("PUB".to_string()),
+            Frame::SimpleString("foo".to_string()),
+            Frame::BulkString(Bytes::from("bar")),
+        ]);
+        let cmd = CommandVariant::from_frame(frame).unwrap();
+        assert_eq!(
+            cmd,
+            CommandVariant::Publish(PublishCmd::new("foo".to_string(), Bytes::from("bar")))
+        );
     }
 }

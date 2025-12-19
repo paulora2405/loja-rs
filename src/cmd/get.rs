@@ -7,7 +7,7 @@ use tracing::debug;
 /// Get a `value` for a given `key`.
 ///
 /// If the key does not exist, a `Null` RESP type is returned.
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct GetCmd {
     key: String,
 }

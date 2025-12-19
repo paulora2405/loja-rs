@@ -5,7 +5,7 @@ use bytes::Bytes;
 use tracing::debug;
 
 /// Pings the server, which responds with either `PONG` or a provided custom message.
-#[derive(Debug, Default)]
+#[derive(Debug, Default, PartialEq, Eq)]
 pub struct PingCmd {
     msg: Option<Bytes>,
 }

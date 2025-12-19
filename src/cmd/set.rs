@@ -17,7 +17,7 @@ use tracing::debug;
 ///
 /// * EX `seconds` -- Set the specified expire time, in seconds.
 /// * PX `milliseconds` -- Set the specified expire time, in milliseconds.
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct SetCmd {
     /// The lookup key.
     key: String,
@@ -131,9 +131,7 @@ impl Command for SetCmd {
         db: &crate::Db,
         dst: &mut crate::Connection<S>,
     ) -> Result<()> {
-        {
-            db.set(self.key, self.value, self.expire);
-        }
+        db.set(self.key, self.value, self.expire);
         let response = Frame::SimpleString("OK".to_string());
         debug!(?response);
         dst.write_frame(&response).await?;
